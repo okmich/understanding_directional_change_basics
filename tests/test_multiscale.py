@@ -204,3 +204,65 @@ def test_frozen_feature_columns_transfer_a_pilot_feature_set_unchanged() -> None
         reason == "not_in_frozen_feature_set" for reason in transferred.removed_feature_reasons.values()
     )
     assert set(transferred.training_point_mass_share) >= set(pilot.feature_columns)
+
+
+def test_hmm_partition_loglik_continues_the_forward_filter_and_reconciles_by_feature() -> None:
+    """Partition scores are one-step-ahead predictions given all earlier bars (review follow-up).
+
+    They must sum to the whole-sequence predictive log-likelihood, and the per-feature table
+    plus its state-assignment term must reproduce the partition score exactly.
+    """
+    _, global_state, _ = build_multiscale_state(
+        layered_prices(), (0.005, 0.009, 0.014, 0.021, 0.032), firing_window=50, include_scale_state=False
+    )
+    prepared = prepare_data(global_state, ObservationClock.UNION_EVENT, FeatureTier.DYNAMIC)
+    fit = fit_candidate(prepared, ModelFamily.NORMAL_HMM, n_states=2, random_state=17)
+    assert fit.error is None
+
+    all_values = np.vstack([prepared.arrays[name] for name in ("train", "validation", "test")])
+    whole = fit.model.compute_per_bar_predictive_loglik(all_values).sum()
+    np.testing.assert_allclose(sum(fit.log_likelihoods.values()), whole, rtol=1e-10)
+
+    table = emission_feature_contributions(fit, prepared, "validation")
+    rows = len(prepared.arrays["validation"])
+    np.testing.assert_allclose(
+        table.attrs["feature_terms_per_row"] + table.attrs["state_assignment_term"],
+        fit.log_likelihoods["validation"] / rows, rtol=1e-10,
+    )
+    assert table.attrs["state_assignment_term"] <= 1e-9
+
+
+def test_mixture_floor_hits_are_counted_like_the_hmm_floor() -> None:
+    """scikit-learn adds reg_covar to every variance; a point-mass component must still count."""
+    _, global_state, _ = build_multiscale_state(
+        layered_prices(), (0.005, 0.009, 0.014, 0.021, 0.032), firing_window=50, include_scale_state=False
+    )
+    prepared = prepare_data(global_state, ObservationClock.UNION_EVENT, FeatureTier.DYNAMIC)
+    fit = fit_candidate(prepared, ModelFamily.GAUSSIAN_MIXTURE, n_states=3, random_state=17)
+    assert fit.error is None
+    from dc_multiscale_research import _at_variance_floor, emission_variance_diagnostics
+
+    floor = fit.min_emission_variance
+    reg = float(fit.model.reg_covar)
+    variances = np.array([[reg + 0.1 * floor, reg + 5.0 * floor]])  # empirical 0.1x floor vs 5x floor
+    np.testing.assert_array_equal(_at_variance_floor(fit, variances), [[True, False]])
+    _, hits, _ = emission_variance_diagnostics(fit)
+    expected = int(((np.asarray(fit.model.covariances_) - reg) <= floor * (1 + 1e-6)).sum())
+    assert hits == expected
+
+
+def test_bootstrap_verdict_does_not_depend_on_diagnostic_order() -> None:
+    """Notebooks 22 and 24 list diagnostics in different orders; a diagnostic's interval must not change."""
+    rng = np.random.default_rng(11)
+    rows = 600
+    labels = pd.Series(rng.integers(0, 3, rows))
+    baseline = pd.Series(rng.integers(0, 2, rows))
+    frame = pd.DataFrame({
+        "model": labels, "baseline": baseline,
+        "a": labels * 0.3 + rng.normal(size=rows),
+        "b": rng.normal(size=rows),
+        "c": baseline * 0.2 + rng.normal(size=rows),
+    })
+    forward = incremental_usefulness(frame, ["a", "b", "c"], "model", {"structural": "baseline"}, n_bootstrap=99)
+    reverse = incremental_usefulness(frame, ["c", "b", "a"], "model", {"structural": "baseline"}, n_bootstrap=99)
+    pd.testing.assert_frame_equal(forward, reverse.loc[forward.index])

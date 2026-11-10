@@ -24,7 +24,7 @@ At a current DCC:
 
 The state describes the completed leg, while the mode describes what is live. The next extreme, DCC, TMV, T, R, and state are unknown.
 
-If Audit 6 shows little incremental forward information, that is still a useful conclusion: the HMM is a descriptive event-state compressor rather than a next-event forecaster.
+If Audit 6b shows that the HMM state adds nothing beyond one lag of log R (its bootstrap interval contains zero), that is still a useful conclusion: the HMM is a descriptive event-state compressor rather than a next-event forecaster. Audit 6 cannot answer this question, because its target is the model's own next label.
 
 ## Mandatory exercises
 

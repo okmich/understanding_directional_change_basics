@@ -41,6 +41,8 @@ def resolve_data_root(data_root: str | Path | None = None) -> Path:
             f"or write the directory path on one line of {REPOSITORY_ROOT / DATA_ROOT_FILE_NAME}."
         )
     resolved = Path(candidate).expanduser()
+    if source != "argument" and not source.startswith("$") and not resolved.is_absolute():
+        resolved = REPOSITORY_ROOT / resolved  # a relative path in .dc_data_root means "from the repo root"
     if not resolved.is_dir():
         raise FileNotFoundError(f"Market-data directory from {source} does not exist: {resolved}")
     return resolved
@@ -77,7 +79,9 @@ def load_close(
     the same convention: with ``"open"`` a 15-minute bar is labelled by its open
     and aggregates the native bars stamped [open, open + 15 min); with
     ``"close"`` it is labelled by its close and aggregates (close - 15 min, close].
-    Either way the sampled close is the last native close inside the interval.
+    Either way the sampled close is the last native close inside the interval. A
+    trailing interval that the data does not cover to its end is dropped: its last
+    close is an intermediate price that would change once later bars arrive.
     """
     path = data_root / f"{symbol}.parquet"
     raw = pd.read_parquet(path)
@@ -100,7 +104,15 @@ def load_close(
     if sampling_minutes > NATIVE_BAR_MINUTES:
         rule = f"{sampling_minutes}min"
         side = "left" if bar_timestamp == "open" else "right"
+        last_native = close.index[-1]
         close = close.resample(rule, label=side, closed=side).last().dropna()
+        if len(close):
+            interval = pd.Timedelta(minutes=sampling_minutes)
+            native = pd.Timedelta(minutes=NATIVE_BAR_MINUTES)
+            # Timestamp of the last native bar that belongs inside the final interval.
+            final_native = close.index[-1] + interval - native if bar_timestamp == "open" else close.index[-1]
+            if last_native < final_native:
+                close = close.iloc[:-1]
         close.name = symbol
     return close
 

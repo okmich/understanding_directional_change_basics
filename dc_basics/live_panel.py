@@ -18,6 +18,7 @@ example small DCCs during a medium-to-large stage). It is reported as
 ``sub_lower_dccs`` and ``sub_lower_dcc_rate``.
 """
 
+import warnings
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -279,16 +280,33 @@ def build_live_panel(stages: pd.DataFrame, lineages: pd.DataFrame, context: Live
     return pd.concat(parts, ignore_index=True)
 
 
+FIRST_STAGE_CONSTANT_HIERARCHY_COLUMNS = ("direction_boundaries", "counter_depth", "coherent_frontier")
+
+
 def constant_by_construction_features(stage_specs: Mapping[Any, object],
                                       scale_order: Sequence[Any]) -> dict[str, frozenset[str]]:
-    """List, per stage, live features that cannot vary inside a pre-resolution panel."""
+    """List, per stage, live features that cannot vary inside a pre-resolution panel.
+
+    In every stage the active lower and upper clocks cannot fire, so their nested counts are
+    zero. In the first stage nothing lies below the smallest clock, so sub-lower activity is
+    zero too. The first stage of a broad-agreement root also has a fixed hierarchy shape:
+    only the smallest clock has turned, so the direction-boundary count is 1, counter depth
+    is 1, the frontier is coherent, and agreement breadth with the top scale is N - 1.
+
+    That last group rests on the nesting near-invariant (a larger clock does not confirm
+    before the smaller ones). :func:`summarize_checkpoint_overlap` warns and computes the AUC
+    anyway if a listed feature does vary.
+    """
     first_scale = enum_value(scale_order[0])
+    top_scale = enum_value(scale_order[-1])
     constant: dict[str, frozenset[str]] = {}
     for stage, specification in stage_specs.items():
         lower, upper = (enum_value(scale) for scale in _spec_scales(specification))
         names = {f"nested_{lower}_dccs", f"nested_{upper}_dccs"}
         if lower == first_scale:
             names.update({"sub_lower_dccs", "sub_lower_dcc_rate"})
+            names.update(FIRST_STAGE_CONSTANT_HIERARCHY_COLUMNS)
+            names.add(f"{top_scale}_agreement_breadth")
         constant[enum_value(stage)] = frozenset(names)
     return constant
 
@@ -346,7 +364,15 @@ def summarize_checkpoint_overlap(rows: pd.DataFrame, features: Sequence[str], *,
         propagated = int(target.sum())
         constant_names = constant_by_construction.get(str(key_values.get("stage", "")), frozenset())
         for feature in features:
-            if feature in constant_names:
+            registered_constant = feature in constant_names
+            if registered_constant and _finite_float(group[feature]).nunique() > 1:
+                warnings.warn(
+                    f"{feature} is registered as constant by construction in stage "
+                    f"{key_values.get('stage')!r} but varies; computing its AUC instead.",
+                    stacklevel=2,
+                )
+                registered_constant = False
+            if registered_constant:
                 record = {
                     "valid_rows": len(group),
                     "raw_auc_for_higher_value": np.nan,
@@ -396,16 +422,21 @@ def compare_initiation_and_live_features(rows: pd.DataFrame, initiation_features
     """Ask whether live geometry adds information beyond completed initiation features.
 
     ``rows`` must be one row per attempt, all observed at the same checkpoint,
-    so both feature sets describe the *same* survivor cohort. Two logistic
+    so both feature sets describe the *same* survivor cohort. Three logistic
     models are fitted with forward-chaining folds ordered by ``order_column``
     (each fold is scored by a model trained only on earlier attempts):
 
     - initiation only (completed seed / hand-off leg TMV, T, R);
-    - initiation plus live features.
+    - initiation plus live features;
+    - live features only.
 
-    The pooled out-of-fold AUC of each model, and their difference, are
-    returned together with the best univariate in-sample AUC of each feature
-    set. This is a diagnostic of incremental information, not a forecast.
+    The pooled out-of-fold AUC of each model is returned with the best univariate
+    in-sample AUC of each feature set. ``oos_auc_gain`` is plus-live minus
+    initiation-only. An initiation-only AUC below 0.5 is worse than chance and
+    would inflate that difference, so ``oos_auc_gain_over_floor`` measures the
+    plus-live AUC against the better of 0.5 and the initiation-only model. Credit
+    live information only when that floor gain is positive, and compare with the
+    live-only AUC. This is a diagnostic of incremental information, not a forecast.
     """
     from sklearn.linear_model import LogisticRegression
     from sklearn.model_selection import TimeSeriesSplit
@@ -435,6 +466,8 @@ def compare_initiation_and_live_features(rows: pd.DataFrame, initiation_features
         "oos_auc_initiation": np.nan,
         "oos_auc_initiation_plus_live": np.nan,
         "oos_auc_gain": np.nan,
+        "oos_auc_live_only": np.nan,
+        "oos_auc_gain_over_floor": np.nan,
         "status": AUC_INSUFFICIENT_SAMPLE,
     }
     if min(propagated, rejected) < min_class_count:
@@ -452,14 +485,15 @@ def compare_initiation_and_live_features(rows: pd.DataFrame, initiation_features
         if best is not None:
             result[f"best_{label}_feature"], result[f"best_{label}_auc"] = best
 
-    predictions = {"initiation": [], "initiation_plus_live": []}
+    predictions = {"initiation": [], "initiation_plus_live": [], "live_only": []}
     scored_targets = []
     for train_index, test_index in TimeSeriesSplit(n_splits=n_splits).split(clean):
         if len(np.unique(target[train_index])) < 2:
             continue
         scored_targets.append(target[test_index])
         for label, feature_set in (("initiation", list(initiation_features)),
-                                   ("initiation_plus_live", all_features)):
+                                   ("initiation_plus_live", all_features),
+                                   ("live_only", list(live_features))):
             model = make_pipeline(
                 QuantileTransformer(output_distribution="normal",
                                     n_quantiles=min(100, len(train_index))),
@@ -475,12 +509,22 @@ def compare_initiation_and_live_features(rows: pd.DataFrame, initiation_features
     if len(np.unique(scored)) < 2:
         result["status"] = "single_class_out_of_fold"
         return result
+    # The guard above counted the whole cohort; the AUC is scored only on out-of-fold rows.
+    scored_propagated = int(scored.sum())
+    if min(scored_propagated, int(scored.size) - scored_propagated) < min_class_count:
+        result["status"] = AUC_INSUFFICIENT_SAMPLE
+        return result
     base_auc = float(roc_auc_score(scored, np.concatenate(predictions["initiation"])))
     full_auc = float(roc_auc_score(scored, np.concatenate(predictions["initiation_plus_live"])))
+    live_auc = float(roc_auc_score(scored, np.concatenate(predictions["live_only"])))
     result.update({
         "oos_auc_initiation": base_auc,
         "oos_auc_initiation_plus_live": full_auc,
         "oos_auc_gain": full_auc - base_auc,
+        "oos_auc_live_only": live_auc,
+        # An initiation-only AUC below 0.5 is worse than chance; measure the gain from the better
+        # of chance and that model, so a below-chance baseline cannot inflate it.
+        "oos_auc_gain_over_floor": full_auc - max(base_auc, 0.5),
         "status": "ok",
     })
     return result

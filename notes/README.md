@@ -156,7 +156,7 @@ Every lab and chapter must obey these rules:
 2. Exclude a stage's resolution bar from its pre-resolution live panel.
 3. Never backward-join terminal outcomes or future resolution records into causal feature rows.
 4. Mark close-only same-bar cross-scale order as ambiguous.
-5. Fit scalers, semantic mappings, thresholds, and model choices on the declared training data only.
+5. Fit scalers, semantic mappings, and thresholds on the declared training data only; choose models on validation data; never let test data inform either.
 6. Use filtered rather than smoothed state probabilities for deployable descriptions.
 7. Preserve unresolved, ambiguous, unlinked, collapsed, and inadequate cases in audits.
 8. Separate event-weighted from bar-weighted statistics.

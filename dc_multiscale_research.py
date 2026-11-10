@@ -8,6 +8,8 @@ understood. No function in this module constructs a trading signal.
 from __future__ import annotations
 
 import warnings
+import zlib
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
@@ -595,7 +597,12 @@ def fit_candidate(
             all_probabilities = model.predict_proba(all_values)
             probabilities = {name: all_probabilities[part] for name, part in slices.items()}
             states = {name: np.argmax(values, axis=1) for name, values in probabilities.items()}
-            log_likelihoods = {name: model.log_likelihood(values) for name, values in arrays.items()}
+            # Score each partition as one-step-ahead predictions given every earlier bar: the same
+            # forward filter that produced its state probabilities. Scoring a partition as a fresh
+            # sequence would restart from the start vector and add end probabilities, neither of
+            # which belongs to a mid-sample partition.
+            per_bar_loglik = model.compute_per_bar_predictive_loglik(all_values)
+            log_likelihoods = {name: float(per_bar_loglik[part].sum()) for name, part in slices.items()}
 
         train_codes = prepared.frames["train"]["structural_regime_code"].to_numpy(dtype=np.int64)
         mapping = semantic_state_map(states["train"], train_codes, n_states)
@@ -651,22 +658,36 @@ def transition_matrix(states: np.ndarray, n_states: int) -> np.ndarray:
     return np.divide(counts, totals, out=np.zeros_like(counts, dtype=float), where=totals > 0)
 
 
+def _emission_variances(fit: CandidateFit) -> np.ndarray:
+    """Fitted diagonal emission variances with shape ``(states, features)``."""
+    if fit.family is ModelFamily.GAUSSIAN_MIXTURE:
+        return np.asarray(fit.model.covariances_, dtype=np.float64)
+    return np.vstack([_diagonal(state["covs"]) for state in fit.model.parameters])
+
+
+def _at_variance_floor(fit: CandidateFit, variances: np.ndarray) -> np.ndarray:
+    """Flag variances where the data alone would have fallen below the floor.
+
+    The pomegranate HMMs clamp a variance at ``min_cov``, so a floored state has variance equal
+    to the floor. scikit-learn's mixture instead adds ``reg_covar`` (set to the same floor) to
+    every empirical variance, so the comparable test there is ``variance - reg_covar <= floor``.
+    Using one rule keeps floor counts comparable across families.
+    """
+    tolerance = fit.min_emission_variance * (1.0 + 1e-6)
+    if fit.family is ModelFamily.GAUSSIAN_MIXTURE:
+        return (variances - float(fit.model.reg_covar)) <= tolerance
+    return variances <= tolerance
+
+
 def emission_variance_diagnostics(fit: CandidateFit) -> tuple[float, int, float]:
     """Return minimum fitted variance, floor-hit count, and floor-hit share."""
     if fit.error is not None or fit.family is ModelFamily.KMEANS:
         return np.nan, 0, np.nan
-    if fit.family is ModelFamily.GAUSSIAN_MIXTURE:
-        variances = np.asarray(fit.model.covariances_, dtype=np.float64).ravel()
-    else:
-        variances = np.concatenate([
-            np.asarray(parameters["covs"], dtype=np.float64).ravel()
-            for parameters in fit.model.parameters
-        ])
+    variances = _emission_variances(fit)
     if variances.size == 0:
         return np.nan, 0, np.nan
-    tolerance = fit.min_emission_variance * (1.0 + 1e-6)
-    floor_hits = int(np.count_nonzero(variances <= tolerance))
-    return float(np.nanmin(variances)), floor_hits, floor_hits / len(variances)
+    floor_hits = int(np.count_nonzero(_at_variance_floor(fit, variances)))
+    return float(np.nanmin(variances)), floor_hits, floor_hits / variances.size
 
 
 def training_classes_without_state(fit: CandidateFit, prepared: PreparedData) -> tuple[str, ...]:
@@ -727,6 +748,15 @@ def emission_feature_contributions(
 
     ``weighted_log_density`` is the mean over rows of the state-probability-weighted per-feature
     emission log density (filtered probabilities for HMMs, mixture memberships for the mixture).
+
+    These feature terms do not add up to the model's log-likelihood. For every row,
+    ``log p(x) = sum_k w_k log p_k(x) - KL(w || prior)``, where ``w`` are the state probabilities
+    after seeing the row and ``prior`` the probabilities before it (the one-step prediction for an
+    HMM, the mixture weights for the mixture). The KL term belongs to no feature. It is stored as
+    ``table.attrs["state_assignment_term"]``, computed as the *remainder* log-likelihood minus
+    feature terms, so it shows the size of the non-feature part rather than checking anything.
+    For the pomegranate HMMs the remainder also absorbs a small leak from the learned end
+    probabilities (transition rows sum to slightly less than one).
     ``gain_vs_standard_normal`` subtracts the same feature's mean log density under one standard
     normal, the natural reference for train-standardised inputs. A feature with a large gain and
     states at the variance floor is buying likelihood by isolating values, not by describing a
@@ -739,11 +769,7 @@ def emission_feature_contributions(
     per_feature = emission_feature_log_density(fit, values)
     weighted = np.einsum("tk,tkj->j", weights, per_feature) / len(values)
     reference = (-0.5 * np.log(2.0 * np.pi) - 0.5 * values**2).mean(axis=0)
-    if fit.family is ModelFamily.GAUSSIAN_MIXTURE:
-        variances = np.asarray(fit.model.covariances_, dtype=np.float64)
-    else:
-        variances = np.vstack([_diagonal(state["covs"]) for state in fit.model.parameters])
-    floor_states = (variances <= fit.min_emission_variance * (1.0 + 1e-6)).sum(axis=0)
+    floor_states = _at_variance_floor(fit, _emission_variances(fit)).sum(axis=0)
     table = pd.DataFrame({
         "weighted_log_density": weighted,
         "gain_vs_standard_normal": weighted - reference,
@@ -754,7 +780,12 @@ def emission_feature_contributions(
     }, index=pd.Index(prepared.feature_columns, name="feature"))
     total_gain = table["gain_vs_standard_normal"].sum()
     table["share_of_total_gain"] = table["gain_vs_standard_normal"] / total_gain if total_gain else np.nan
-    return table.sort_values("gain_vs_standard_normal", ascending=False)
+    table = table.sort_values("gain_vs_standard_normal", ascending=False)
+    log_likelihood_per_row = fit.log_likelihoods.get(partition, np.nan) / len(values)
+    table.attrs["log_likelihood_per_row"] = log_likelihood_per_row
+    table.attrs["feature_terms_per_row"] = float(weighted.sum())
+    table.attrs["state_assignment_term"] = log_likelihood_per_row - float(weighted.sum())
+    return table
 
 
 def candidate_summary(fit: CandidateFit, prepared: PreparedData) -> dict[str, object]:
@@ -899,8 +930,10 @@ def add_future_diagnostics(global_state: pd.DataFrame, horizons: tuple[int, ...]
         frame[f"future_dcc_count_{horizon}"] = (
             frame["dcc_count_this_bar"].rolling(horizon).sum().shift(-horizon)
         )
-        frame[f"configuration_changes_{horizon}"] = frame["configuration_code"].shift(-horizon).ne(
-            frame["configuration_code"]
+        future_configuration = frame["configuration_code"].shift(-horizon)
+        frame[f"configuration_changes_{horizon}"] = (
+            future_configuration.ne(frame["configuration_code"]).astype("boolean")
+            .where(future_configuration.notna(), pd.NA)
         )
     return frame
 
@@ -934,7 +967,8 @@ def omega_squared(values: pd.Series, labels: pd.Series) -> float:
 
 def block_bootstrap_omega_difference(
     values: pd.Series, model_labels: pd.Series, baseline_labels: pd.Series, *,
-    n_bootstrap: int = 499, block_length: int = 20, confidence: float = 0.90, random_state: int = 17,
+    n_bootstrap: int = 499, block_length: int = 20, confidence: float = 0.90,
+    random_state: int | Sequence[int] = 17,
 ) -> dict[str, float]:
     """Moving-block bootstrap interval for omega-squared(model) minus omega-squared(baseline).
 
@@ -982,6 +1016,10 @@ def incremental_usefulness(
     """Compare a model partition with the stronger of several direct baselines, per diagnostic.
 
     For each diagnostic the baseline with the larger observed omega-squared is the comparator.
+    Each diagnostic's bootstrap stream is seeded from ``random_state`` and the diagnostic's
+    *name*, so the same diagnostic gets the same resampling wherever it is evaluated (notebooks
+    22 and 24 list diagnostics in different orders).
+
     The verdict is computed, not written by hand:
 
     - ``adds_beyond_baselines``: the bootstrap interval of model minus best baseline is above 0;
@@ -989,7 +1027,7 @@ def incremental_usefulness(
     - ``no_information_beyond_baseline``: the interval contains 0.
     """
     records = []
-    for diagnostic_index, column in enumerate(diagnostic_columns):
+    for column in diagnostic_columns:
         baseline_omegas = {
             name: omega_squared(frame[column], frame[label]) for name, label in baseline_columns.items()
         }
@@ -1000,7 +1038,7 @@ def incremental_usefulness(
         interval = block_bootstrap_omega_difference(
             frame[column], frame[model_column], frame[baseline_columns[best_baseline]],
             n_bootstrap=n_bootstrap, block_length=block_length, confidence=confidence,
-            random_state=random_state + diagnostic_index,
+            random_state=[random_state, zlib.crc32(str(column).encode("utf-8"))],
         )
         if not np.isfinite(interval["ci_low"]):
             verdict = "insufficient_sample"

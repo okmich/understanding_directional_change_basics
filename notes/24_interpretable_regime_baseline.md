@@ -63,7 +63,7 @@ Before probabilistic modeling, the learner must be able to:
 8. Report every removed emission feature with its reason (training-constant, nearly discrete, or a zero-inflated point mass covering at least 20% of training rows) and dropped rows by structural class.
 9. State what a later model must add: calibrated confidence, persistence, compression, or useful separation.
 
-**Current status:** Notebook source revised after the 2026-11-10 review; rerun pending; learner interpretation pending.
+**Current status:** Notebook executed with the current code on 2026-11-10; learner interpretation pending.
 
 ## Completion-gate guidance
 

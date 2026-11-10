@@ -44,10 +44,14 @@ the notebooks still show how each scale count changes the economic questions.
   - *ambiguous*: an already active attempt sees opposing lower and upper DCCs
     on one bar (`ambiguous_same_bar`). Close-only data cannot order them, so
     the attempt keeps that explicit outcome and its lineage has no terminal
-    depth.
-- `strict_clean` lineages exclude every zero-length stage. Because a zero-length
-  stage can only be a propagation, strict-clean reach rates are biased low;
-  `resolved_lineage` is the unbiased cohort for probability ladders.
+    depth. On one close series this cannot actually happen (one of the two
+    clocks would have confirmed on an earlier bar), so it is a defensive guard;
+    none occurred on 6 symbols x 36 threshold pairs.
+- `strict_clean` lineages exclude every lineage with a zero-length stage. Such a
+  stage can only be a propagation, so every dropped lineage reached at least the
+  first upper scale and the strict-clean first-stage rate is biased low by
+  construction; later rates need not be, because a dropped lineage can still be
+  rejected at a later stage. Use `resolved_lineage` for probability ladders.
 - "The smaller clock confirms first" and "an odd number of lower DCCs lies
   between consecutive upper DCCs" are near-invariants, not guarantees. With
   multiplicative thresholds the upper clock can occasionally confirm first.

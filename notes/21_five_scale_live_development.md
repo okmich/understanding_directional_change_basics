@@ -32,7 +32,7 @@ As stage age increases, resolved paths leave the cohort. A rising later propagat
 
 Run [5_threshold_dc_live_development.ipynb](../5_threshold_dc_live_development.ipynb).
 
-Use fixed checkpoints, survivor trajectories, shape occupancy, and depth casebooks to identify which live features gain separation only after the path develops. Live Audit 2b checks whether the raw direction is consistent for up and down targets, and Live Audit 2c compares live geometry with the completed prior legs. AUCs are withheld when either outcome has fewer than 20 survivors.
+Use fixed checkpoints, survivor trajectories, shape occupancy, and depth casebooks to identify which live features gain separation only after the path develops. Live Audit 2b checks whether the raw direction is consistent for up and down targets, and Live Audit 2c compares live geometry with the completed prior legs. An initiation-only out-of-sample AUC below 0.5 is worse than chance and inflates a plain gain, so credit the live path only when the plus-live AUC beats both 0.5 and the initiation model (`oos_auc_gain_over_floor` > 0), and compare with the live-only AUC. At elapsed 0 there is no live path yet. AUCs are withheld when either outcome has fewer than 20 survivors.
 
 ## Mandatory exercises
 

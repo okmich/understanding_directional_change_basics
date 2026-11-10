@@ -17,7 +17,7 @@ Until one of those DCCs occurs, the attempt is unresolved. The outcome is a futu
 
 Small events alternate direction. Between suitable large-scale boundaries, an odd small-event count reflects the final small confirmation that aligns with the large transition; preceding pairs encode attempts that reversed before reaching the large scale. Check the interval definition before asserting parity, because initialization, truncation, same-bar events, and unresolved boundaries can invalidate a naive count.
 
-Odd parity is a near-invariant under multiplicative thresholds, not a law. If the large clock confirms a reversal before the small clock (Chapter 6), that interval holds an even small count and the large reversal belongs to no small attempt. The library keeps such intervals, flags them with `parity_violation` and counts them in an audit; it does not assert them away. On the repository's data they are rare, but a synthetic ten-bar path in `tests/test_hierarchy.py` shows one.
+Odd parity is a near-invariant under multiplicative thresholds, not a law. If the large clock confirms a reversal before the small clock (Chapter 6), that interval holds an even small count and the large reversal belongs to no small attempt. The library keeps such intervals, flags them with `parity_violation` and counts them in an audit; it does not assert them away. None occurred in any of this repository's runs, but a synthetic ten-bar path in `tests/test_hierarchy.py` shows one.
 
 ## Resolution bar
 

@@ -32,7 +32,7 @@ The cohort rules are the same as in Chapter 16:
 
 - Ambiguous, unlinked, and unresolved lineages remain counted in the status audit. They have no terminal depth, so no probability ladder includes them; `max_attained_depth` records how far they got.
 - The **all-resolved** ladder is the unbiased description of propagation.
-- **Strict-clean** lineages also exclude same-bar stages, which have no unresolved pre-resolution life. They are the cohort for live-stage analysis. Every excluded same-bar stage is a propagation, so strict-clean reach rates are biased low and must not be quoted as propagation probabilities.
+- **Strict-clean** lineages also exclude same-bar stages, which have no unresolved pre-resolution life. They are the cohort for live-stage analysis. Every excluded same-bar stage is a propagation, so strict-clean P(reach medium) is biased low by construction; later rates are usually lower too but can be higher, because a dropped lineage can be rejected at a later stage. Strict-clean rates must not be quoted as propagation probabilities.
 
 Conditional reach rates multiply by the chain rule within one cohort, without stage independence.
 
@@ -49,7 +49,7 @@ Audit root eligibility, all hand-offs, depth counts, exclusions, conditional rea
 3. Distinguish attained and terminal depth at each stage.
 4. Explain why depth zero is a genuine attempt and depth four is not a continuation forecast.
 5. Derive the cumulative reach product.
-6. Explain why every strict-clean conditional rate is at or below its all-resolved counterpart.
+6. Explain why the strict-clean P(reach medium) is at or below its all-resolved counterpart, and why a later conditional rate is not guaranteed to be (Chapter 22's robustness cases include a counterexample).
 
 ## Completion gate G16 — Five-threshold linkage
 
@@ -59,7 +59,7 @@ Before live development, the learner must be able to:
 2. Find each stage using its exact resolution event ID rather than nearest-time matching.
 3. Define terminal depths 0 through 4 and distinguish them from causal attained depth.
 4. Explain why depth zero is a real attempt and depth four is confirmation of outer-scale propagation, not continuation.
-5. Exclude same-bar stages from the strict-clean live cohort, distinguish a same-bar (zero-length) propagation from an ambiguous stage, and explain why the strict-clean ladder is biased low relative to the all-resolved ladder.
+5. Exclude same-bar stages from the strict-clean live cohort, distinguish a same-bar (zero-length) propagation from an ambiguous stage, and explain which part of the strict-clean ladder is biased low by construction.
 6. Multiply conditional reach rates without asserting stage independence.
 7. Quantify lower-scale activity strictly before each stage's resolving DCC while a later stage remains unresolved.
 8. Check depth stability by direction and sample third.
@@ -75,7 +75,7 @@ These are reasoning outlines, not substitutes for notebook evidence. A complete 
 - Exact hand-offs form `small -> medium -> large -> macro -> outer` under one seed.
 - Depth zero is a real rejected small attempt; depth four confirms outer reach, not continuation.
 - Attained depth updates at each upper DCC; terminal depth waits for final resolution.
-- Strict-clean live cohorts exclude same-bar stages but report them separately. Every excluded same-bar stage is a propagation, so the strict-clean ladder is biased low; the all-resolved ladder is the unbiased description.
+- Strict-clean live cohorts exclude same-bar stages but report them separately. Every excluded lineage reached at least medium, so the strict-clean first-stage rate is biased low by construction and later rates only usually; the all-resolved ladder is the description to quote.
 - Ambiguous, unresolved, and unlinked lineages have no terminal depth; `max_attained_depth` records how far they got before ending.
 - Stage-anatomy counts exclude the resolving DCC, so a propagated stage's upper-scale count measures activity before the propagation.
 

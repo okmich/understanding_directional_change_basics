@@ -20,11 +20,13 @@ DEFAULT_TRAJECTORY_FEATURES = {
     "direction_boundaries": "Directional boundaries",
     "sub_lower_dcc_rate": "DCC rate below the lower clock",
 }
-# Stage 1's lower clock is the smallest scale: nothing exists below it.
+# Stage 1's lower clock is the smallest scale: nothing exists below it. Its direction-boundary
+# count is also constant (only the seed scale disagrees with a broad-agreement root), so the
+# panel shows the two excursion measures instead.
 FIRST_STAGE_TRAJECTORY_FEATURES = {
     "target_progress": "Progress toward upper DCC",
     "lower_r_live": "Live lower-scale R",
-    "direction_boundaries": "Directional boundaries",
+    "max_favorable_excursion_theta": "Max favourable excursion (lower-theta units)",
     "max_adverse_excursion_theta": "Max adverse excursion (lower-theta units)",
 }
 

@@ -16,6 +16,19 @@ It begins with one threshold and hand-readable events. Only after the mechanics 
 
 This is a research and education repository. It is not a trading strategy or investment recommendation.
 
+<p align="center">
+  <a href="notes/README.md#core-bibliography">
+    <img src="img/book_cover.jpg" alt="Cover of Detecting Regime Change in Computational Finance" width="240">
+  </a>
+</p>
+
+<p align="center">
+  <strong>Foundational inspiration</strong><br>
+  <em>Detecting Regime Change in Computational Finance</em><br>
+  Jun Chen and Edward P. K. Tsang<br>
+  <sub>This learning journey builds on their progression from Directional Change indicators to regime characterization.</sub>
+</p>
+
 ## Why this project is different
 
 Directional Change is easy to implement superficially and easy to misread. I went through the proverbial arc of learning many times until I decided to document it myself. Common errors include:
@@ -174,7 +187,7 @@ All contributions and derivative studies should preserve these rules:
 3. A stage's resolution bar is excluded from its pre-resolution live panel.
 4. Propagated/rejected and terminal-depth labels are hindsight until their resolution times.
 5. The initiating small event remains the immutable lineage ID through every exact hand-off.
-6. With close-only bars, a lower-scale DCC and an opposing upper-scale DCC on the same bar cannot be ordered. That stage is marked `ambiguous_same_bar`. A seed and its upper-scale confirmation on the same bar are different: that is a zero-length propagation, not an ambiguity.
+6. With close-only bars, a lower-scale DCC and an opposing upper-scale DCC on the same bar cannot be ordered. That stage is marked `ambiguous_same_bar`. On a single close series this case cannot actually occur, because one of the two clocks would have confirmed on an earlier bar; the label is a defensive guard. A seed and its upper-scale confirmation on the same bar are different: that is a zero-length propagation, not an ambiguity.
 7. Filtered probabilities, not smoothed probabilities, are used for causal state paths.
 8. Scaling, semantic mapping, and model selection are training-only.
 9. Bar-time and event-time results are identified separately.

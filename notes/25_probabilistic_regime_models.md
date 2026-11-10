@@ -61,7 +61,7 @@ Before model selection, the learner must be able to:
 8. Read restart stability (adjusted Rand agreement across seeds) for every family before any selection.
 9. Explain, feature by feature, where a density model's likelihood comes from, and why zero-inflated point masses are screened out of continuous emissions.
 
-**Current status:** Notebook source revised after the 2026-11-10 review; rerun pending; learner interpretation pending.
+**Current status:** Notebook executed with the current code on 2026-11-10; learner interpretation pending.
 
 ## Completion-gate guidance
 

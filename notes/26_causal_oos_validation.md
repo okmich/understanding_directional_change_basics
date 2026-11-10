@@ -36,7 +36,7 @@ Two cautions keep this honest. Raw eta-squared grows with the number of groups e
 
 ## Where the likelihood comes from
 
-Validation likelihood ranks eligible candidates, so its source must be visible. With diagonal covariances each candidate's log density splits exactly by feature. If most of the gain comes from features whose states sit at the variance floor, the ranking measures how well a model isolates repeated values, not how well it describes the data.
+Validation likelihood ranks eligible candidates (when only one passes the gates, the gates alone choose it), so its source must be visible. With diagonal covariances each state's emission log density splits exactly by feature; the ranked likelihood also contains a state-assignment term that belongs to no feature, and the notebook prints that remainder. If most of the gain comes from features whose states sit at the variance floor, the ranking measures how well a model isolates repeated values, not how well it describes the data.
 
 ## Lab
 
@@ -69,7 +69,7 @@ Before economic interpretation, the learner must be able to:
 10. Label previously explored history as exploratory OOS evidence rather than untouched confirmation.
 11. Inspect per-feature likelihood contributions and variance-floor hits before trusting likelihood differences between candidates.
 
-**Current status:** Notebook source revised after the 2026-11-10 review; rerun pending; learner interpretation pending.
+**Current status:** Notebook executed with the current code on 2026-11-10; learner interpretation pending.
 
 ## Completion-gate guidance
 
@@ -87,6 +87,7 @@ The final response must reconstruct the notebook's validation-only selection. It
 - raw states drive partition metrics;
 - bias-corrected, permutation-audited separation is compared with direction-neutral and direction-aware baselines;
 - the block-bootstrap verdict, not a hand-picked positive difference, decides whether the model adds information beyond the stronger baseline;
+- verdicts carry no family-wise correction across diagnostics, so a lone positive verdict needs agreement across horizons and markets;
 - the test remains exploratory because the history was previously inspected.
 
 </details>

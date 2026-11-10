@@ -30,11 +30,13 @@ Two table shapes are offered:
 
 Both carry ``resolved_lineage`` (terminal depth is defined),
 ``same_bar_stage_count`` and ``strict_clean`` (resolved and no zero-bar stage).
-Note that ``strict_clean`` is biased toward shallower depths: a zero-bar stage
-can only be a propagation (a rejection needs a later lower DCC), so removing
-same-bar stages removes propagations only. Use ``resolved_lineage`` for
-probability ladders and ``strict_clean`` where a non-empty live interval is
-required.
+A zero-bar stage can only be a propagation (a rejection needs a later lower
+DCC), so every lineage that ``strict_clean`` drops reached at least the first
+upper scale: the strict-clean first-stage rate is biased low by construction.
+Later conditional rates need not be, because ``strict_clean`` drops whole
+lineages and a dropped lineage can still be rejected at a later stage. Use
+``resolved_lineage`` for probability ladders and ``strict_clean`` where a
+non-empty live interval is required.
 """
 
 from collections.abc import Mapping, Sequence
@@ -56,9 +58,24 @@ def _stage_name(lower: str, upper: str) -> str:
     return f"{lower}_to_{upper}"
 
 
+def _check_edge(attempts: pd.DataFrame, lower: str, upper: str, role: str) -> None:
+    """Refuse an attempt table built for a different adjacent pair than the ladder expects.
+
+    Passing stage frames in the wrong order would otherwise turn most lineages into
+    silent ``unlinked`` rows rather than an error.
+    """
+    if attempts.empty or "edge" not in attempts:
+        return
+    expected = f"{lower}->{upper}"
+    found = sorted(set(attempts["edge"].astype(str)))
+    if found != [expected]:
+        raise ValueError(f"{role} attempts are for edge(s) {found}, but the ladder expects {expected!r}.")
+
+
 def _stage_lookups(stage_attempts: Sequence[pd.DataFrame], scale_names: Sequence[str]) -> list[pd.DataFrame]:
     lookups = []
     for stage_index, attempts in enumerate(stage_attempts, start=1):
+        _check_edge(attempts, scale_names[stage_index], scale_names[stage_index + 1], f"Stage {stage_index + 1}")
         if attempts["initiating_event_id"].duplicated().any():
             raise AssertionError(f"A {scale_names[stage_index]} event initiates more than one next-scale attempt.")
         lookups.append(attempts.set_index("initiating_event_id", drop=False))
@@ -73,6 +90,7 @@ def _trace_lineages(seed_attempts: pd.DataFrame, later_attempts: Sequence[pd.Dat
         raise ValueError("later_attempts must contain one frame for every edge after the seed edge.")
     if len(stage_labels) != len(scale_names) - 1:
         raise ValueError("stage_labels must name every adjacent edge.")
+    _check_edge(seed_attempts, scale_names[0], scale_names[1], "Seed")
     lookups = _stage_lookups(later_attempts, scale_names)
     edge_count = len(scale_names) - 1
     lineages: list[dict[str, object]] = []
@@ -184,7 +202,10 @@ def _trace_lineages(seed_attempts: pd.DataFrame, later_attempts: Sequence[pd.Dat
 def _finish_common_columns(frame: pd.DataFrame) -> pd.DataFrame:
     frame["terminal_depth"] = frame["terminal_depth"].astype("Int64")
     frame["outcome_information_time"] = frame["terminal_time"]
-    frame["terminal_label_hindsight_at_seed"] = frame["terminal_time"].gt(frame["seed_time"])
+    # An outcome that is never resolved in the sample is also unknown at the seed.
+    frame["terminal_label_hindsight_at_seed"] = (
+        frame["terminal_time"].isna() | frame["terminal_time"].gt(frame["seed_time"])
+    )
     frame["total_resolution_bars"] = (
         pd.to_numeric(frame["terminal_position"], errors="coerce") - frame["seed_position"]
     )

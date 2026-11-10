@@ -41,7 +41,7 @@ Inspect:
 
 - distributions and tail quantiles of TMV, T, and R;
 - mean versus median by direction;
-- the overshoot table: DC portion, overshoot, their bar counts, and the share of legs with zero overshoot;
+- the overshoot table: DC portion, overshoot, the overshoot's bar count, and the share of legs with zero overshoot;
 - the count of $T=1,2,3,\ldots$ events;
 - raw bars around a consecutive-extreme event.
 
@@ -67,7 +67,7 @@ Before Chapter 3, the learner must be able to:
 5. Compare the mean, median, and tail of TMV, T, and R, including their right-skewness.
 6. Compare TMV and R by direction without assuming directional symmetry.
 7. Explain why event observations are path-dependent and not an IID sample of bars.
-8. Read the most recent price-path casebook and say what each completed leg and new live mode means economically.
+8. Read the lab's chart of the most recent prices with their DC events and say what each completed leg and new live mode means economically.
 
 **Locked-in statement:** A downward DCC confirms the prior peak and switches the live DC mode down; the completed upward leg's statistics become known at that confirmation.
 

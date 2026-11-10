@@ -42,7 +42,7 @@ The question is not whether every percentage matches. Ask which mechanical and e
 
 1. Explain why every distribution does not need log-R.
 2. Explain the Jacobian adjustment in words, and why Normal on log-R and LogNormal on raw R must tie once it is applied.
-3. Compare the winner by predictive fit with the winner by visual label balance, then say whether the winner's lead is larger than its fold-to-fold and seed-to-seed spread.
+3. Compare the winner by predictive fit with the winner by visual label balance, then say whether the winner leads within every fold by more than the seed-to-seed spread.
 4. Identify one conclusion that transfers across EURUSD and US500 and one that remains case-specific.
 5. Explain what a near-zero sequence-order premium says about the role of Markov dynamics.
 
@@ -51,7 +51,7 @@ The question is not whether every percentage matches. Ask which mechanical and e
 Before Chapter 6, the learner must be able to:
 
 1. Explain why raw R need not be log-transformed for every distribution family.
-2. Compare Normal, Student-t, Lambda, and other supported candidates using convergence, raw-R-scale likelihood (with the Jacobian for every density over log R, including LogNormal), stability across folds and seeds, occupancy, and economic interpretability rather than label balance alone.
+2. Compare Normal, Student-t, Lambda, and other supported candidates using fit status (failed or collapsed fits), raw-R-scale likelihood (with the Jacobian for every density over log R, including LogNormal), stability across folds and seeds, occupancy, and economic interpretability rather than label balance alone.
 3. Explain why different emission families may assign different labels to the same region.
 4. Reproduce the definitions, plots, filtering, and audits on another symbol without changing the interpretation after seeing results.
 5. Identify which conclusions transfer across EURUSD and US500 and which are threshold-, symbol-, or sample-specific.
@@ -67,7 +67,7 @@ These are reasoning outlines, not substitutes for notebook evidence. A complete 
 
 - Real-support families can use log-R; positive-support families can model raw R.
 - Density comparison across transforms requires the Jacobian so likelihoods share the raw-R scale. pomegranate's LogNormal is a density over log R too, so it needs the same correction; afterwards Normal(log R) and LogNormal(R) tie exactly.
-- A lead smaller than the fold-to-fold or seed-to-seed spread is not a ranking.
+- Compare ranks within each fold, never raw scores across folds; a lead smaller than the seed-to-seed spread is a tie, not a ranking.
 - Prefer stable OOS predictive density and non-collapsed interpretable states over balanced occupancy.
 - A near-zero sequence-order premium means transitions add little beyond marginal mixture partitioning.
 - Transfer concerns meanings and qualitative relationships, not identical percentages.

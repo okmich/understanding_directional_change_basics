@@ -180,8 +180,57 @@ def test_constant_by_construction_registry() -> None:
     constant = constant_by_construction_features(STAGE_SPECS, SCALE_ORDER)
     assert constant["small_to_medium"] == {
         "nested_small_dccs", "nested_medium_dccs", "sub_lower_dccs", "sub_lower_dcc_rate",
+        "direction_boundaries", "counter_depth", "coherent_frontier", "large_agreement_breadth",
     }
     assert constant["medium_to_large"] == {"nested_medium_dccs", "nested_large_dccs"}
+
+
+def test_first_stage_hierarchy_shape_is_fixed(three_scale: dict[str, object]) -> None:
+    """In Stage 1 of a broad-agreement root only the small clock has turned (registry rationale)."""
+    context, panel = three_scale["context"], three_scale["panel"]
+    stage_one = panel.loc[panel["stage"].eq("small_to_medium")]
+    modes = context.mode_frame.loc[pd.DatetimeIndex(stage_one["time"]), [f"{scale}_mode" for scale in SCALE_ORDER]]
+    boundaries = (modes.iloc[:, :-1].to_numpy() != modes.iloc[:, 1:].to_numpy()).sum(axis=1)
+    breadth_with_top = (modes.to_numpy() == modes.iloc[:, [-1]].to_numpy()).sum(axis=1)
+    assert len(stage_one) > 100
+    assert set(boundaries) == {1}
+    assert set(breadth_with_top) == {len(SCALE_ORDER) - 1}
+
+
+def test_registered_constant_that_varies_is_warned_and_scored() -> None:
+    rows = pd.DataFrame({
+        "stage": "small_to_medium", "elapsed_bars": 0,
+        "future_stage_outcome": ["propagated"] * 30 + ["rejected"] * 30,
+        "direction_boundaries": [1] * 30 + [2] * 30,
+    })
+    with pytest.warns(UserWarning, match="registered as constant"):
+        summary = summarize_checkpoint_overlap(
+            rows, ["direction_boundaries"], min_class_count=20,
+            constant_by_construction={"small_to_medium": frozenset({"direction_boundaries"})},
+        )
+    assert summary.loc[0, "orientation_free_auc"] == pytest.approx(1.0)
+
+
+def test_live_only_and_floor_gain_are_reported() -> None:
+    """A noise-only initiation model can score below 0.5; the floor gain must not reward that."""
+    rng = np.random.default_rng(4)
+    rows_count = 400
+    outcome = rng.integers(0, 2, rows_count)
+    rows = pd.DataFrame({
+        "lineage_id": [f"S{i}" for i in range(rows_count)],
+        "stage_start_time": pd.date_range("2024-01-01", periods=rows_count, freq="h"),
+        "future_stage_outcome": np.where(outcome == 1, "propagated", "rejected"),
+        "seed_leg_tmv": rng.normal(size=rows_count),
+        "target_progress": outcome * 0.8 + rng.normal(size=rows_count),
+    })
+    result = compare_initiation_and_live_features(rows, ["seed_leg_tmv"], ["target_progress"])
+    assert result["status"] == "ok"
+    assert result["oos_auc_live_only"] > 0.6
+    assert result["oos_auc_gain_over_floor"] == pytest.approx(
+        result["oos_auc_initiation_plus_live"] - max(result["oos_auc_initiation"], 0.5)
+    )
+    assert result["oos_auc_gain_over_floor"] <= result["oos_auc_initiation_plus_live"] - 0.5 + 1e-12
+    assert result["oos_auc_gain_over_floor"] <= result["oos_auc_gain"] + 1e-12
 
 
 def test_checkpoint_overlap_explains_every_missing_auc() -> None:
@@ -267,3 +316,41 @@ def test_live_panel_is_prefix_invariant(three_scale: dict[str, object], cut: int
         .sort_values(keys).reset_index(drop=True)
     )
     pd.testing.assert_frame_equal(expected, prefix_panel.sort_values(keys).reset_index(drop=True))
+
+
+def test_panel_rows_read_every_input_at_their_own_bar(three_scale: dict[str, object]) -> None:
+    """Each live-panel row must take its live inputs from the row's own bar (review follow-up).
+
+    Together with the prefix-invariance tests of ``dc_live_features`` and the running
+    extreme (tests/test_prefix_invariance.py, test_hierarchy.py), this closes the gap in
+    which inputs shifted forward by even one bar would pass the information-time audit.
+    """
+    context, panel = three_scale["context"], three_scale["panel"]
+    specs = {stage: pair for stage, pair in STAGE_SPECS.items()}
+    checked = 0
+    for stage, (lower, upper) in specs.items():
+        rows = panel.loc[panel["stage"].eq(stage)]
+        times = pd.DatetimeIndex(rows["time"])
+        for prefix, scale in (("lower", lower), ("upper", upper)):
+            # Recomputed from prices here, independently of the context, so a context built
+            # from shifted inputs fails too -- not only a builder that shifts them.
+            live = dc_live_features(context.prices, theta=THRESHOLDS[scale]).loc[times]
+            for column, source in (("tmv_live", "tmv_current"), ("t_live", "t_current"), ("r_live", "rdc_current")):
+                np.testing.assert_array_equal(
+                    rows[f"{prefix}_{column}"].to_numpy(dtype=float), live[source].to_numpy(dtype=float),
+                    err_msg=f"{stage} {prefix}_{column} is not read at the row's own bar",
+                )
+                checked += len(rows)
+        np.testing.assert_array_equal(rows["price"].to_numpy(dtype=float),
+                                      context.prices.loc[times].to_numpy(dtype=float))
+    assert checked > 1_000
+
+
+def test_alignment_check_catches_a_one_bar_shift(three_scale: dict[str, object]) -> None:
+    """The alignment test above must fail if the panel used next-bar inputs."""
+    context, panel = three_scale["context"], three_scale["panel"]
+    lower, _ = STAGE_SPECS["small_to_medium"]
+    rows = panel.loc[panel["stage"].eq("small_to_medium")]
+    shifted = dc_live_features(context.prices, theta=THRESHOLDS[lower])["tmv_current"].shift(-1)
+    shifted = shifted.loc[pd.DatetimeIndex(rows["time"])]
+    assert not np.array_equal(rows["lower_tmv_live"].to_numpy(dtype=float), shifted.to_numpy(dtype=float))

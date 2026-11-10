@@ -80,7 +80,7 @@ These are reasoning outlines, not substitutes for notebook evidence. A complete 
 - Stage-1 propagation can be known while Stage-2 and terminal depth remain unknown.
 - Every row's feature time is current; its stage and terminal outcome-information times are later.
 - The active lower and upper clocks cannot fire inside a stage panel, because either DCC is the resolution bar. Nested activity therefore comes only from clocks below the lower clock, and Stage 1 has none.
-- Whether live progress adds information is judged against the completed seed and hand-off legs on the same survivor cohort (Live Audit 2b). A positive out-of-sample gain is diagnostic, not a forecast.
+- Whether live progress adds information is judged against the completed seed and hand-off legs on the same survivor cohort (Live Audit 2b). An initiation-only out-of-sample AUC below 0.5 is worse than chance and inflates a plain gain, so credit the live path only when the plus-live AUC beats both 0.5 and the initiation model (`oos_auc_gain_over_floor` > 0), and compare with the live-only AUC. At elapsed 0 there is no live path yet. A positive floor gain is diagnostic, not a forecast.
 
 </details>
 

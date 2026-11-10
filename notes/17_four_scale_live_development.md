@@ -29,7 +29,7 @@ The active stage's own lower and upper clocks cannot fire inside its panel, beca
 
 Run [4_threshold_dc_live_development.ipynb](../4_threshold_dc_live_development.ipynb).
 
-Inspect timing audits, checkpoints, overlap (with survivor counts beside every AUC), Live Audit 2b on completed initiation features, trajectories, hierarchy-shape occupancy, and the terminal-depth casebook.
+Inspect timing audits, checkpoints, overlap (with survivor counts beside every AUC), Live Audit 2b on completed initiation features, trajectories, hierarchy-shape occupancy, and the terminal-depth casebook. In Live Audit 2b, an initiation-only out-of-sample AUC below 0.5 is worse than chance and inflates a plain gain, so credit the live path only when the plus-live AUC beats both 0.5 and the initiation model (`oos_auc_gain_over_floor` > 0), and compare with the live-only AUC. At elapsed 0 there is no live path yet.
 
 ## Mandatory exercises
 

@@ -146,7 +146,13 @@ def _scan_adjacent_contest(frame: pd.DataFrame, lower_scale: str | Enum,
         "edge", "lower_scale", "upper_scale", "upper_event_id", "time", "position",
         "new_upper_mode", "lower_mode", "lower_dcc_same_bar",
     ])
-    return pd.DataFrame.from_records(records), upper_led
+    attempt_columns = [
+        "edge", "lower_scale", "upper_scale", "initiating_event_id", "start_time", "start_position",
+        "target_mode", "prior_upper_mode", "outcome", "resolution_event_id", "resolution_time",
+        "resolution_position", "resolution_bars",
+    ]
+    # Keep the schema even when an edge has no attempts, so downstream joins never meet a column-less frame.
+    return pd.DataFrame.from_records(records, columns=attempt_columns), upper_led
 
 
 def build_adjacent_attempts(frame: pd.DataFrame, lower_scale: str | Enum, upper_scale: str | Enum) -> pd.DataFrame:

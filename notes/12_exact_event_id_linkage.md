@@ -30,7 +30,7 @@ $$
 
 This is the chain rule, not an independence assumption. Because $D\ge2$ implies $D\ge1$, the identity holds by arithmetic in any cohort; it is a definition to understand, not a test to pass.
 
-Only medium events descended from the declared small roots enter the linked second-stage cohort, so in general the linked rate need not equal the unconditional medium-to-large rate. With three scales and broad-agreement roots, however, the two cohorts are essentially identical. A medium DCC against large is almost always preceded by a small DCC that left three-scale agreement and propagated through that medium DCC, so almost every medium-to-large attempt is linked, and the notebook shows the two rows coinciding. The rates can differ under a narrower root (four-scale agreement in Chapter 16), under a lineage filter such as strict-clean, or at deeper hand-offs.
+Only medium events descended from the declared small roots enter the linked second-stage cohort, so in general the linked rate need not equal the unconditional medium-to-large rate. With three scales and broad-agreement roots, however, the two cohorts are essentially identical. A medium DCC against large is almost always preceded by a small DCC that left three-scale agreement and propagated through that medium DCC, so almost every medium-to-large attempt is linked, and the notebook shows the two rows coinciding. The rates can differ under a narrower root (four-scale agreement in Chapter 16 makes the intermediate medium-to-large edge differ) or under a lineage filter such as strict-clean. On each ladder's top edge they coincided in every run here.
 
 ## Lab
 
@@ -53,11 +53,11 @@ Before live development, the learner must be able to:
 1. Explain why the medium event ID is the valid hand-off key between the two adjacent building blocks.
 2. Explain why a broad-agreement origin gives the small disturbance definite ancestry.
 3. Distinguish terminal depths 0, 1, and 2 from causal attained depth.
-4. Explain why, with three-scale broad-agreement roots, linked Stage-2 rates coincide with unconditional medium-to-large rates, and which narrower roots, lineage filters or deeper hand-offs make them differ.
+4. Explain why, with three-scale broad-agreement roots, linked Stage-2 rates coincide with unconditional medium-to-large rates, and which narrower roots or lineage filters make them differ.
 5. Derive the linked probability product without making an independence assumption, and explain why it holds by arithmetic rather than testing anything.
 6. Recognize small-scale cycles inside an unresolved medium-to-large contest.
 7. Identify the DCC on which each depth is attained and each terminal outcome becomes known.
-8. Retain same-bar, ambiguous, unresolved, and unlinked cases explicitly, and explain why the strict-clean cohort (no same-bar stage) gives reach rates biased low relative to the all-resolved cohort.
+8. Retain same-bar, ambiguous, unresolved, and unlinked cases explicitly, and explain why the strict-clean cohort (no same-bar stage) gives a P(reach medium) biased low relative to the all-resolved cohort.
 9. Explain why a linked lineage is a genealogy of confirmations, not necessarily one monotonic price move.
 
 ## Completion-gate guidance
@@ -71,8 +71,8 @@ These are reasoning outlines, not substitutes for notebook evidence. A complete 
 - Timestamp proximity is insufficient because multiple candidate events may occur nearby.
 - Terminal depths 0/1/2 are final outcomes; attained depth changes causally at exact hand-offs.
 - $P(D\ge2)=P(D\ge1)P(D\ge2\mid D\ge1)$ is the chain rule for one cohort, not independence. It holds by arithmetic, so it is not a test; the checks that can fail are the genealogical ones (every depth-1+ lineage has an exact medium hand-off and a propagated first edge).
-- With three-scale broad-agreement roots, the linked and unconditional medium-to-large rates coincide: a medium DCC against large is almost always preceded by a small DCC that left three-scale agreement and propagated through it, so nearly every medium-to-large attempt is linked. They differ under narrower roots (four-scale agreement), lineage filters such as strict-clean, or deeper hand-offs.
-- The all-resolved ladder is unbiased. Strict-clean removes same-bar stages, which are always propagations, so its reach rates are lower by construction.
+- With three-scale broad-agreement roots, the linked and unconditional medium-to-large rates coincide: a medium DCC against large is almost always preceded by a small DCC that left three-scale agreement and propagated through it, so nearly every medium-to-large attempt is linked. They differ under narrower roots (four-scale agreement, on intermediate edges) or lineage filters such as strict-clean; a ladder's top edge coincided in every run here.
+- Quote the all-resolved ladder. Strict-clean drops every lineage with a same-bar stage; each of those reached medium, so its P(reach medium) is lower by construction, while its later rates are lower only empirically.
 
 </details>
 

@@ -8,7 +8,7 @@ Test whether the representation, direct taxonomy, and frozen modeling procedure 
 
 ## Structural matrix
 
-[24_cross_market_robustness.ipynb](../24_cross_market_robustness.ipynb) retains all 45 predeclared structural cases, including inadequate cases. Threshold ladders and frequencies are fixed across symbols rather than optimized market by market, and comparisons use common calendar coverage.
+[24_cross_market_robustness.ipynb](../24_cross_market_robustness.ipynb) retains all 45 predeclared structural cases; an inadequate case would stay visible rather than be dropped. Threshold ladders and frequencies are fixed across symbols rather than optimized market by market, and comparisons use common calendar coverage.
 
 Report early/middle/late occupancy ranges so period instability is visible. The three periods are equal calendar thirds of the common interval, so every market and sampling frequency is split at the same dates; splitting by row position would put the boundaries on different dates for markets with different trading hours. A result that requires deleting weak cases or inventing a new story for every symbol is non-transfer.
 
@@ -56,7 +56,7 @@ Before making a transferable regime claim, the learner must be able to:
 9. Recognize symbol-specific rules or stories as non-transfer.
 10. Avoid calling previously inspected markets untouched external confirmation.
 
-**Current status:** Notebook source revised after the 2026-11-10 review; rerun pending; learner interpretation pending.
+**Current status:** Notebook executed with the current code on 2026-11-10; learner interpretation pending.
 
 ## Completion-gate guidance
 

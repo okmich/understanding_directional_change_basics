@@ -62,7 +62,7 @@ For each inferred state, the learner must be able to state:
 8. Whether it adds a stable distinction beyond both direct baselines.
 9. Why the state still does not specify a position, entry, exit, or expected net return.
 
-**Current status:** Notebook source revised after the 2026-11-10 review; rerun pending; learner interpretation pending.
+**Current status:** Notebook executed with the current code on 2026-11-10; learner interpretation pending.
 
 ## Completion-gate guidance
 

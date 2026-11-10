@@ -588,6 +588,9 @@ def plot_dc_linkage_flow(linkages: pd.DataFrame, title: str | None = None) -> go
     if linkages["terminal_depth"].isna().any():
         raise ValueError("linkages must contain resolved terminal depths only.")
 
+    unsupported = sorted(set(linkages["terminal_depth"].astype(int)) - {0, 1, 2})
+    if unsupported:
+        raise ValueError(f"plot_dc_linkage_flow draws three-scale lineages only; got terminal depths {unsupported}.")
     depth_counts = linkages["terminal_depth"].astype(int).value_counts().reindex([0, 1, 2], fill_value=0)
     depth_zero = int(depth_counts.loc[0])
     depth_one = int(depth_counts.loc[1])
