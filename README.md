@@ -8,7 +8,7 @@ This repository is designed to answer a deceptively difficult question:
 
 The project combines three layers:
 
-1. a concise [textbook](docs/textbook/README.md);
+1. a concise [textbook](docs/book/README.md);
 2. chronological notebook laboratories using real market paths;
 3. a reusable Python implementation with explicit event identities and information timestamps.
 
@@ -62,12 +62,12 @@ See the [textbook source-of-truth manifest](docs/TEXTBOOK_MANIFEST.md) for the d
 
 If you are learning Directional Change, do not begin with the regime models.
 
-1. Read the [front matter](docs/textbook/FRONT_MATTER.md).
-2. Read [Chapter 0 — The pre-exploration contract](docs/textbook/chapters/00_pre_exploration_contract.md).
-3. Read Chapters [1](docs/textbook/chapters/01_directional_change_mechanics.md) and [2](docs/textbook/chapters/02_tmv_t_r_overshoot.md).
+1. Read the [front matter](docs/book/README.md#front-matter).
+2. Read [Chapter 0 — The pre-exploration contract](docs/book/00_pre_exploration_contract.md).
+3. Read Chapters [1](docs/book/01_directional_change_mechanics.md) and [2](docs/book/02_tmv_t_r_overshoot.md).
 4. Run [`1_threshold_dc_explore.ipynb`](1_threshold_dc_explore.ipynb).
 5. Reconstruct several events by hand.
-6. Answer the chapter exercises before opening the [solution guide](docs/textbook/solutions/COMPLETION_GATE_GUIDE.md).
+6. Answer the chapter exercises before expanding that chapter's integrated completion-gate guidance.
 
 Then continue in the sequence below. Running a notebook is necessary but not sufficient: advance only after you can explain its completion gate in your own words and apply it to an unseen chart segment.
 
@@ -75,15 +75,15 @@ Then continue in the sequence below. Running a notebook is necessary but not suf
 
 | Stage | Concepts | Textbook | Notebook labs |
 |---|---|---|---|
-| Pre-exploration | Information time, event identity, causal versus hindsight | [Chapter 0](docs/textbook/chapters/00_pre_exploration_contract.md) | Research contract and tests |
-| One threshold | DCC mechanics, TMV, T, R, overshoot, filtered event states | [Chapters 1–5](docs/textbook/README.md#part-i--one-threshold) | [`1_threshold_dc_explore.ipynb`](1_threshold_dc_explore.ipynb), [`1_threshold_dc.ipynb`](1_threshold_dc.ipynb), [`1_threshold_dc_explore_hmm_dist.ipynb`](1_threshold_dc_explore_hmm_dist.ipynb) |
-| Two thresholds | Independent clocks, counter-moves, propagation, rejection, survival | [Chapters 6–10](docs/textbook/README.md#part-ii--two-thresholds) | [`2_threshold_dc.ipynb`](2_threshold_dc.ipynb), [`2_threshold_dc_event_characteristics.ipynb`](2_threshold_dc_event_characteristics.ipynb), [`2_threshold_dc_robustness.ipynb`](2_threshold_dc_robustness.ipynb) |
-| Three thresholds | Eight configurations, exact two-stage lineage, live hand-off | [Chapters 11–14](docs/textbook/README.md#part-iii--three-thresholds) | [`3_threshold_dc.ipynb`](3_threshold_dc.ipynb), [`3_threshold_dc_linkage.ipynb`](3_threshold_dc_linkage.ipynb), [`3_threshold_dc_live_development.ipynb`](3_threshold_dc_live_development.ipynb), [`3_threshold_dc_robustness.ipynb`](3_threshold_dc_robustness.ipynb) |
-| Four thresholds | Sixteen configurations, coherent depth, fragmentation, three-stage lineage | [Chapters 15–17](docs/textbook/README.md#part-iv--four-thresholds) | [`4_threshold_dc.ipynb`](4_threshold_dc.ipynb), [`4_threshold_dc_linkage.ipynb`](4_threshold_dc_linkage.ipynb), [`4_threshold_dc_live_development.ipynb`](4_threshold_dc_live_development.ipynb) |
-| Five thresholds | Grid design, 32 configurations, four-stage lineage, robustness | [Chapters 18–22](docs/textbook/README.md#part-v--five-thresholds) | [`5_threshold_dc.ipynb`](5_threshold_dc.ipynb), [`5_threshold_dc_linkage.ipynb`](5_threshold_dc_linkage.ipynb), [`5_threshold_dc_live_development.ipynb`](5_threshold_dc_live_development.ipynb), [`5_threshold_dc_robustness.ipynb`](5_threshold_dc_robustness.ipynb) |
-| Arbitrary N | Canonical scale, edge, hierarchy, and lineage representations | [Chapter 23](docs/textbook/chapters/23_arbitrary_n_representation.md) | [`multiscale_representation_design.ipynb`](multiscale_representation_design.ipynb) |
-| Regime models | Direct baseline, clustering, filtered HMMs, OOS validation, interpretation | [Chapters 24–28](docs/textbook/README.md#part-vii--probabilistic-regimes) | [`20_interpretable_regime_baseline.ipynb`](20_interpretable_regime_baseline.ipynb), [`21_probabilistic_regime_models.ipynb`](21_probabilistic_regime_models.ipynb), [`22_causal_oos_validation.ipynb`](22_causal_oos_validation.ipynb), [`23_economic_interpretation.ipynb`](23_economic_interpretation.ipynb), [`24_cross_market_robustness.ipynb`](24_cross_market_robustness.ipynb) |
-| Research engineering | Reusable library, invariant tests, reproducibility | [Chapters 29–30](docs/textbook/README.md#part-viii--research-engineering) | `dc_basics/`, `tests/` |
+| Pre-exploration | Information time, event identity, causal versus hindsight | [Chapter 0](docs/book/00_pre_exploration_contract.md) | Research contract and tests |
+| One threshold | DCC mechanics, TMV, T, R, overshoot, filtered event states | [Chapters 1–5](docs/book/README.md#part-i--one-threshold) | [`1_threshold_dc_explore.ipynb`](1_threshold_dc_explore.ipynb), [`1_threshold_dc.ipynb`](1_threshold_dc.ipynb), [`1_threshold_dc_explore_hmm_dist.ipynb`](1_threshold_dc_explore_hmm_dist.ipynb) |
+| Two thresholds | Independent clocks, counter-moves, propagation, rejection, survival | [Chapters 6–10](docs/book/README.md#part-ii--two-thresholds) | [`2_threshold_dc.ipynb`](2_threshold_dc.ipynb), [`2_threshold_dc_event_characteristics.ipynb`](2_threshold_dc_event_characteristics.ipynb), [`2_threshold_dc_robustness.ipynb`](2_threshold_dc_robustness.ipynb) |
+| Three thresholds | Eight configurations, exact two-stage lineage, live hand-off | [Chapters 11–14](docs/book/README.md#part-iii--three-thresholds) | [`3_threshold_dc.ipynb`](3_threshold_dc.ipynb), [`3_threshold_dc_linkage.ipynb`](3_threshold_dc_linkage.ipynb), [`3_threshold_dc_live_development.ipynb`](3_threshold_dc_live_development.ipynb), [`3_threshold_dc_robustness.ipynb`](3_threshold_dc_robustness.ipynb) |
+| Four thresholds | Sixteen configurations, coherent depth, fragmentation, three-stage lineage | [Chapters 15–17](docs/book/README.md#part-iv--four-thresholds) | [`4_threshold_dc.ipynb`](4_threshold_dc.ipynb), [`4_threshold_dc_linkage.ipynb`](4_threshold_dc_linkage.ipynb), [`4_threshold_dc_live_development.ipynb`](4_threshold_dc_live_development.ipynb) |
+| Five thresholds | Grid design, 32 configurations, four-stage lineage, robustness | [Chapters 18–22](docs/book/README.md#part-v--five-thresholds) | [`5_threshold_dc.ipynb`](5_threshold_dc.ipynb), [`5_threshold_dc_linkage.ipynb`](5_threshold_dc_linkage.ipynb), [`5_threshold_dc_live_development.ipynb`](5_threshold_dc_live_development.ipynb), [`5_threshold_dc_robustness.ipynb`](5_threshold_dc_robustness.ipynb) |
+| Arbitrary N | Canonical scale, edge, hierarchy, and lineage representations | [Chapter 23](docs/book/23_arbitrary_n_representation.md) | [`multiscale_representation_design.ipynb`](multiscale_representation_design.ipynb) |
+| Regime models | Direct baseline, clustering, filtered HMMs, OOS validation, interpretation | [Chapters 24–28](docs/book/README.md#part-vii--probabilistic-regimes) | [`20_interpretable_regime_baseline.ipynb`](20_interpretable_regime_baseline.ipynb), [`21_probabilistic_regime_models.ipynb`](21_probabilistic_regime_models.ipynb), [`22_causal_oos_validation.ipynb`](22_causal_oos_validation.ipynb), [`23_economic_interpretation.ipynb`](23_economic_interpretation.ipynb), [`24_cross_market_robustness.ipynb`](24_cross_market_robustness.ipynb) |
+| Research engineering | Reusable library, invariant tests, reproducibility | [Chapters 29–30](docs/book/README.md#part-viii--research-engineering) | `dc_basics/`, `tests/` |
 
 ## Installation
 
@@ -222,7 +222,7 @@ The essential direction rule is that each row describes the leg that *ended*. Th
 ├── tests/                            # Construction and provenance invariants
 ├── docs/
 │   ├── TEXTBOOK_MANIFEST.md          # Authoring and completion contract
-│   └── textbook/                     # Reader-facing Chapters 0–30
+│   └── book/                         # Reader-facing Chapters 0–30
 ├── requirements.txt                  # Research dependencies (HMM fork pinned by commit)
 ├── requirements-dev.txt              # Adds the test runner
 ├── pytest.ini
@@ -266,7 +266,7 @@ The tests cover:
 - optional HMM behaviour;
 - vendored-source parity.
 
-`tests/test_prefix_invariance.py` rebuilds ledgers, attempts, lineages and the arbitrary-N state from a price prefix and compares each with the full-sample build. See [Chapter 29](docs/textbook/chapters/29_reusable_library.md#invariants-as-executable-knowledge) for what remains.
+`tests/test_prefix_invariance.py` rebuilds ledgers, attempts, lineages and the arbitrary-N state from a price prefix and compares each with the full-sample build. See [Chapter 29](docs/book/29_reusable_library.md#invariants-as-executable-knowledge) for what remains.
 
 ## Reading the results responsibly
 
@@ -308,7 +308,7 @@ read chapter
 -> run linked notebook
 -> inspect actual paths
 -> answer completion gate
--> compare with the solution outline
+-> compare with the chapter's completion-gate guidance
 -> correct and approve the chapter
 ```
 

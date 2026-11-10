@@ -4,7 +4,7 @@
 
 **Subtitle:** An intuition-first, causality-safe journey from one threshold to multiscale market regimes  
 **Manifest status:** Active  
-**Textbook status:** Concise first draft of Chapters 0–30 and the solution guide complete; technical and pedagogical review pending  
+**Textbook status:** Concise first draft of Chapters 0–30 with integrated completion-gate guidance complete; technical and pedagogical review pending
 **Primary learner:** The repository author, followed by technically serious public readers  
 **Last structural review:** 2026-11-10
 
@@ -799,7 +799,7 @@ The pilot slice establishes the permanent voice, notation, figure style, exercis
 | 25 | Modularization complete at the notebook-safe boundary | Engineering review complete | Ready for Chapter 29 treatment |
 | 26 | Foundational invariant tests exist | Coverage expansion remains part of release work | Partial |
 | 27 | Standalone repository created | Public pedagogical curation remains | Partial |
-| 28 | Manifest, Chapters 0–30, and separate solution guide drafted | Technical/pedagogical review and G20–G24 integration remain | In progress |
+| 28 | Manifest and Chapters 0–30 with integrated completion-gate guidance drafted | Technical/pedagogical review and G20–G24 integration remain | In progress |
 | 29 | Not started | Not started | Pending |
 
 ---
