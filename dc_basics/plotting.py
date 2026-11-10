@@ -7,15 +7,12 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from .enums import AttemptOutcome as _AttemptOutcome
+from .enums import DcMode as _Direction
 
-class _Direction(StrEnum):
-    UP = "up"
-    DOWN = "down"
-
-
-class _AttemptOutcome(StrEnum):
-    PROPAGATED = "propagated"
-    REJECTED = "rejected"
+# Outcome plots compare resolved attempts only; ambiguous and unresolved rows are
+# rejected by the validators rather than silently dropped.
+_RESOLVED_OUTCOMES = (_AttemptOutcome.PROPAGATED, _AttemptOutcome.REJECTED)
 
 
 class _CrossScaleRelationship(StrEnum):
@@ -642,7 +639,7 @@ def plot_dc_attempt_feature_distributions(attempts: pd.DataFrame, nbins: int = 5
     if nbins <= 0:
         raise ValueError(f"nbins must be positive, got {nbins}.")
 
-    invalid_outcomes = set(attempts["future_outcome"].dropna().unique()).difference(_AttemptOutcome)
+    invalid_outcomes = set(attempts["future_outcome"].dropna().unique()).difference(_RESOLVED_OUTCOMES)
     if invalid_outcomes:
         raise ValueError(f"Unsupported future_outcome values: {sorted(invalid_outcomes)}")
     if attempts[list(feature_labels)].le(0.0).any().any():
@@ -650,7 +647,7 @@ def plot_dc_attempt_feature_distributions(attempts: pd.DataFrame, nbins: int = 5
 
     fig = make_subplots(rows=1, cols=3, subplot_titles=list(feature_labels.values()))
     for column_number, (feature, axis_label) in enumerate(feature_labels.items(), start=1):
-        for outcome in _AttemptOutcome:
+        for outcome in _RESOLVED_OUTCOMES:
             outcome_attempts = attempts.loc[attempts["future_outcome"].eq(outcome)]
             values = np.log10(outcome_attempts[feature].to_numpy(dtype=np.float64))
             fig.add_trace(go.Histogram(
@@ -694,7 +691,7 @@ def plot_dc_attempt_tmv_t_space(attempts: pd.DataFrame, theta: float) -> go.Figu
     if attempts[["tmv", "t", "r"]].le(0.0).any().any():
         raise ValueError("TMV, T, and R must all be strictly positive.")
 
-    invalid_outcomes = set(attempts["future_outcome"].dropna().unique()).difference(_AttemptOutcome)
+    invalid_outcomes = set(attempts["future_outcome"].dropna().unique()).difference(_RESOLVED_OUTCOMES)
     if invalid_outcomes:
         raise ValueError(f"Unsupported future_outcome values: {sorted(invalid_outcomes)}")
     invalid_directions = set(attempts["new_small_mode"].dropna().unique()).difference(_Direction)
@@ -703,7 +700,7 @@ def plot_dc_attempt_tmv_t_space(attempts: pd.DataFrame, theta: float) -> go.Figu
 
     fig = go.Figure()
     direction_symbols = {_Direction.UP: "triangle-up", _Direction.DOWN: "triangle-down"}
-    for outcome in _AttemptOutcome:
+    for outcome in _RESOLVED_OUTCOMES:
         for direction in _Direction:
             selected = attempts.loc[
                 attempts["future_outcome"].eq(outcome) & attempts["new_small_mode"].eq(direction)
@@ -831,7 +828,7 @@ def plot_dc_counter_scale_trajectories(trajectories: pd.DataFrame, max_elapsed_b
         raise ValueError(f"max_elapsed_bars must be non-negative, got {max_elapsed_bars}.")
 
     selected = trajectories.loc[trajectories["elapsed_bars"].le(max_elapsed_bars)].copy()
-    invalid_outcomes = set(selected["future_outcome"].dropna().unique()).difference(_AttemptOutcome)
+    invalid_outcomes = set(selected["future_outcome"].dropna().unique()).difference(_RESOLVED_OUTCOMES)
     if invalid_outcomes:
         raise ValueError(f"Unsupported future_outcome values: {sorted(invalid_outcomes)}")
     invalid_directions = set(selected["target_small_mode"].dropna().unique()).difference(_Direction)
@@ -856,7 +853,7 @@ def plot_dc_counter_scale_trajectories(trajectories: pd.DataFrame, max_elapsed_b
     for feature_number, (feature, axis_label) in enumerate(feature_labels.items()):
         row_number = feature_number // 2 + 1
         column_number = feature_number % 2 + 1
-        for outcome in _AttemptOutcome:
+        for outcome in _RESOLVED_OUTCOMES:
             for direction in _Direction:
                 group = summary.loc[
                     summary["future_outcome"].eq(outcome)
@@ -940,6 +937,8 @@ def plot_dc_counter_scale_price_casebook(prices: pd.Series, trajectories: pd.Dat
 
     for row_number, attempt in enumerate(attempts.itertuples(index=False), start=1):
         outcome = _AttemptOutcome(attempt.future_outcome)
+        if outcome not in _RESOLVED_OUTCOMES:
+            raise ValueError(f"Casebooks plot resolved attempts only, got {outcome.value!r}.")
         direction = _Direction(attempt.target_small_mode)
         start_position = int(attempt.start_position)
         resolution_position = int(attempt.resolution_position)

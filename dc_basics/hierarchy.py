@@ -1,5 +1,26 @@
-"""Shared adjacent-scale contest and nesting mechanics."""
+"""Shared adjacent-scale contest and nesting mechanics.
 
+Two near-invariants hold on almost every real path but are *not* guaranteed by
+multiplicative thresholds:
+
+1. the lower clock confirms a reversal before (or on the same bar as) the upper
+   clock, so every upper reversal is preceded by a lower counter-attempt;
+2. consequently the number of lower DCCs between consecutive upper DCCs is
+   positive and odd.
+
+Because the thresholds are relative to *different* running extremes, the upper
+clock can occasionally confirm first (the relative failure window is roughly
+``theta_lower ** 2``). These functions therefore report violations explicitly
+instead of crashing or silently dropping them:
+
+- :func:`find_upper_led_reversals` lists upper DCCs that flipped the upper mode
+  while the lower mode still pointed the other way;
+- :func:`build_nesting_intervals` flags intervals whose lower count is not
+  positive and odd (``parity_violation``);
+- :func:`summarize_nesting_parity` gives the per-edge audit.
+"""
+
+import warnings
 from enum import Enum
 
 import numpy as np
@@ -9,16 +30,13 @@ from .events import enum_value
 from .enums import AttemptOutcome
 
 
-def build_adjacent_attempts(frame: pd.DataFrame, lower_scale: str | Enum, upper_scale: str | Enum) -> pd.DataFrame:
-    """Resolve counter-scale attempts between one adjacent threshold pair.
-
-    A lower-scale DCC seeds an attempt only when it moves against the upper
-    scale's mode known immediately before that bar. The outcome is hindsight;
-    ``resolution_time`` is the first bar on which it becomes knowable.
-    """
+def _scan_adjacent_contest(frame: pd.DataFrame, lower_scale: str | Enum,
+                           upper_scale: str | Enum) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Walk one adjacent pair bar by bar; return (attempts, upper-led reversals)."""
     lower_name = enum_value(lower_scale)
     upper_name = enum_value(upper_scale)
     records: list[dict[str, object]] = []
+    upper_led_records: list[dict[str, object]] = []
     active: dict[str, object] | None = None
     rows = frame.reset_index(names="time")
     lower_mode_column = f"{lower_name}_mode"
@@ -66,6 +84,28 @@ def build_adjacent_attempts(frame: pd.DataFrame, lower_scale: str | Enum, upper_
                 active = None
                 continue
 
+        if (
+            active is None
+            and upper_dcc
+            and pd.notna(current_upper_mode)
+            and pd.notna(current_lower_mode)
+            and current_upper_mode != current_lower_mode
+            and bar_position > 0
+        ):
+            # The upper clock confirmed a reversal while the lower clock still
+            # pointed the other way: no lower counter-attempt preceded it.
+            upper_led_records.append({
+                "edge": edge,
+                "lower_scale": lower_name,
+                "upper_scale": upper_name,
+                "upper_event_id": upper_event_id,
+                "time": row.time,
+                "position": bar_position,
+                "new_upper_mode": current_upper_mode,
+                "lower_mode": current_lower_mode,
+                "lower_dcc_same_bar": lower_dcc,
+            })
+
         if active is not None or not lower_dcc or bar_position == 0:
             continue
         prior_upper_mode = rows.iloc[bar_position - 1][upper_mode_column]
@@ -102,12 +142,61 @@ def build_adjacent_attempts(frame: pd.DataFrame, lower_scale: str | Enum, upper_
             "resolution_bars": pd.NA,
         })
         records.append(active)
-    return pd.DataFrame.from_records(records)
+    upper_led = pd.DataFrame.from_records(upper_led_records, columns=[
+        "edge", "lower_scale", "upper_scale", "upper_event_id", "time", "position",
+        "new_upper_mode", "lower_mode", "lower_dcc_same_bar",
+    ])
+    return pd.DataFrame.from_records(records), upper_led
+
+
+def build_adjacent_attempts(frame: pd.DataFrame, lower_scale: str | Enum, upper_scale: str | Enum) -> pd.DataFrame:
+    """Resolve counter-scale attempts between one adjacent threshold pair.
+
+    A lower-scale DCC seeds an attempt only when it moves against the upper
+    scale's mode known immediately before that bar. The outcome is hindsight;
+    ``resolution_time`` is the first bar on which it becomes knowable.
+
+    A seed DCC and the upper DCC on the same bar give a zero-bar
+    ``propagated`` attempt (same-bar propagation). ``ambiguous_same_bar`` is a
+    different case: opposing lower and upper DCCs resolving an *active*
+    attempt on one bar.
+
+    Rarely the upper clock reverses first, while the lower mode still points
+    the other way. Such reversals belong to no attempt; they are reported by
+    :func:`find_upper_led_reversals`, and this function warns when any exist.
+    """
+    attempts, upper_led = _scan_adjacent_contest(frame, lower_scale, upper_scale)
+    if not upper_led.empty:
+        warnings.warn(
+            f"{len(upper_led)} {enum_value(upper_scale)} reversal(s) were confirmed before any "
+            f"{enum_value(lower_scale)} counter-attempt; see find_upper_led_reversals().",
+            stacklevel=2,
+        )
+    return attempts
+
+
+def find_upper_led_reversals(frame: pd.DataFrame, lower_scale: str | Enum,
+                             upper_scale: str | Enum) -> pd.DataFrame:
+    """List upper DCCs that reversed the upper mode before the lower clock did.
+
+    These are the exceptions to "the smaller clock confirms first". Each row is
+    an upper DCC after which the upper mode differs from the lower mode while
+    no counter-attempt was active. The lower clock usually catches up on a
+    later bar without seeding a new attempt.
+    """
+    return _scan_adjacent_contest(frame, lower_scale, upper_scale)[1]
 
 
 def build_nesting_intervals(lower_events: pd.DataFrame, upper_events: pd.DataFrame,
                             lower_scale: str | Enum, upper_scale: str | Enum) -> pd.DataFrame:
-    """Count lower-scale DCCs inside each completed upper-scale interval."""
+    """Count lower-scale DCCs inside each completed upper-scale interval.
+
+    An interval runs from one upper DCC (exclusive) to the next (inclusive).
+    The count is normally positive and odd, and ``(count - 1) / 2`` lower
+    counter-attempts were rejected inside it. Intervals that break that
+    near-invariant are kept and flagged with ``parity_violation``; their
+    ``prior_rejections`` is missing because the pairing argument fails.
+    """
     lower_name = enum_value(lower_scale)
     upper_name = enum_value(upper_scale)
     lower_positions = lower_events["dcc_pos"].to_numpy(dtype=np.int64)
@@ -124,11 +213,28 @@ def build_nesting_intervals(lower_events: pd.DataFrame, upper_events: pd.DataFra
     left_edges = np.searchsorted(lower_positions, intervals["interval_start_position"], side="right")
     right_edges = np.searchsorted(lower_positions, intervals["dcc_pos"], side="right")
     intervals["lower_dcc_count"] = right_edges - left_edges
-    if not intervals["lower_dcc_count"].ge(1).all():
-        raise AssertionError(f"An {upper_name} interval contains no {lower_name} DCC.")
-    if not intervals["lower_dcc_count"].mod(2).eq(1).all():
-        raise AssertionError(f"{lower_name.title()} DCC counts must be odd.")
-    intervals["prior_rejections"] = (intervals["lower_dcc_count"] - 1) // 2
+    intervals["parity_violation"] = intervals["lower_dcc_count"].lt(1) | intervals["lower_dcc_count"].mod(2).eq(0)
+    intervals["prior_rejections"] = (
+        ((intervals["lower_dcc_count"] - 1) // 2).astype("Int64").mask(intervals["parity_violation"])
+    )
     intervals["interval_bars"] = intervals["dcc_pos"] - intervals["interval_start_position"]
     intervals["edge"] = f"{lower_name}->{upper_name}"
+    violations = int(intervals["parity_violation"].sum())
+    if violations:
+        warnings.warn(
+            f"{violations} {upper_name} interval(s) contain a non-odd number of {lower_name} DCCs "
+            "(the upper clock confirmed first); they are flagged with parity_violation.",
+            stacklevel=2,
+        )
     return intervals
+
+
+def summarize_nesting_parity(intervals: pd.DataFrame) -> pd.DataFrame:
+    """Per-edge audit of the positive-and-odd nesting near-invariant."""
+    summary = intervals.groupby("edge", sort=False).agg(
+        upper_intervals=("upper_event_id", "size"),
+        parity_violations=("parity_violation", "sum"),
+        empty_intervals=("lower_dcc_count", lambda counts: int(counts.lt(1).sum())),
+    )
+    summary["violation_share"] = summary["parity_violations"] / summary["upper_intervals"]
+    return summary

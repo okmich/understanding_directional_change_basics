@@ -1,4 +1,41 @@
-"""Cross-threshold hand-offs and small-origin lineage construction."""
+"""Cross-threshold hand-offs and small-origin lineage construction.
+
+One canonical tracer, :func:`build_lineage_tables`, follows each seed through
+the adjacent contests by exact event ID. The older entry points are views of
+that one result, so every ladder size shares one set of semantics:
+
+- ``terminal_depth`` is defined only for *resolved* lineages (reached the top
+  scale, or stopped by a rejection). Ambiguous, unresolved and unlinked
+  lineages have ``terminal_depth`` missing; ``max_attained_depth`` records how
+  many hand-offs they had confirmed before ending.
+- ``terminal_time`` / ``terminal_position`` are the bar on which the lineage's
+  fate became knowable. For an unlinked lineage that is the hand-off bar whose
+  upper event initiated no next-scale attempt; for an unresolved lineage it is
+  missing.
+- Every hand-off is checked: the next attempt must start on the hand-off bar
+  and keep the immutable target and origin modes.
+- ``origin_mode`` (the agreed mode before the seed) is emitted in every view.
+
+Two table shapes are offered:
+
+- *wide* (:func:`build_scale_linkages`, ``build_three_scale_linkages``,
+  ``build_four_scale_linkages``): one row per seed with per-scale hand-off and
+  per-edge outcome columns. Outcome labels: ``reached_<top>``,
+  ``stopped_below_<upper>``, ``ambiguous_<lower>_<upper>``,
+  ``unresolved_below_<upper>``, ``unlinked_after_<lower>``.
+- *narrow* (:func:`build_five_scale_linkages`): a lineage table plus one row
+  per traversed stage. Outcome labels: ``reached_<top>``,
+  ``stopped_below_<upper>``, ``ambiguous_stage``, ``unresolved_stage``,
+  ``unlinked_handoff``.
+
+Both carry ``resolved_lineage`` (terminal depth is defined),
+``same_bar_stage_count`` and ``strict_clean`` (resolved and no zero-bar stage).
+Note that ``strict_clean`` is biased toward shallower depths: a zero-bar stage
+can only be a propagation (a rejection needs a later lower DCC), so removing
+same-bar stages removes propagations only. Use ``resolved_lineage`` for
+probability ladders and ``strict_clean`` where a non-empty live interval is
+required.
+"""
 
 from collections.abc import Mapping, Sequence
 from enum import Enum
@@ -8,129 +45,221 @@ import pandas as pd
 from .enums import AttemptOutcome
 from .events import enum_value
 
+_RESOLVED_KINDS = ("reached", "stopped")
+
 
 def _edge_name(lower: str, upper: str) -> str:
     return f"{lower}_{upper}"
+
+
+def _stage_name(lower: str, upper: str) -> str:
+    return f"{lower}_to_{upper}"
+
+
+def _stage_lookups(stage_attempts: Sequence[pd.DataFrame], scale_names: Sequence[str]) -> list[pd.DataFrame]:
+    lookups = []
+    for stage_index, attempts in enumerate(stage_attempts, start=1):
+        if attempts["initiating_event_id"].duplicated().any():
+            raise AssertionError(f"A {scale_names[stage_index]} event initiates more than one next-scale attempt.")
+        lookups.append(attempts.set_index("initiating_event_id", drop=False))
+    return lookups
+
+
+def _trace_lineages(seed_attempts: pd.DataFrame, later_attempts: Sequence[pd.DataFrame],
+                    scale_names: Sequence[str],
+                    stage_labels: Sequence[str]) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+    """Follow every seed through exact event-ID hand-offs (the single implementation)."""
+    if len(scale_names) < 3 or len(later_attempts) != len(scale_names) - 2:
+        raise ValueError("later_attempts must contain one frame for every edge after the seed edge.")
+    if len(stage_labels) != len(scale_names) - 1:
+        raise ValueError("stage_labels must name every adjacent edge.")
+    lookups = _stage_lookups(later_attempts, scale_names)
+    edge_count = len(scale_names) - 1
+    lineages: list[dict[str, object]] = []
+    stages: list[dict[str, object]] = []
+
+    for seed in seed_attempts.itertuples(index=False):
+        seed_row = pd.Series(seed._asdict())
+        lineage_id = seed.initiating_event_id
+        origin_mode = seed.prior_upper_mode
+        target_mode = seed.target_mode
+        lineage: dict[str, object] = {
+            "lineage_id": lineage_id,
+            "seed_time": seed.start_time,
+            "seed_position": int(seed.start_position),
+            "origin_mode": origin_mode,
+            "target_mode": target_mode,
+            "terminal_kind": None,
+            "terminal_stage_index": pd.NA,
+            "terminal_event_id": pd.NA,
+            "terminal_time": pd.NaT,
+            "terminal_position": pd.NA,
+            "terminal_depth": pd.NA,
+            "max_attained_depth": 0,
+            "same_bar_stage_count": 0,
+            "handoffs": {},
+            "edges": {},
+        }
+        current = seed_row
+        for stage_index, (lower, upper) in enumerate(zip(scale_names[:-1], scale_names[1:], strict=True)):
+            if stage_index > 0:
+                handoff_event_id, handoff_time, handoff_position = lineage["handoffs"][lower]
+                lookup = lookups[stage_index - 1]
+                if handoff_event_id not in lookup.index:
+                    lineage.update({
+                        "terminal_kind": "unlinked",
+                        "terminal_stage_index": stage_index,
+                        "terminal_event_id": handoff_event_id,
+                        "terminal_time": handoff_time,
+                        "terminal_position": handoff_position,
+                    })
+                    break
+                current = lookup.loc[handoff_event_id]
+                if isinstance(current, pd.DataFrame):
+                    raise AssertionError("A hand-off event maps to multiple adjacent attempts.")
+                if current["start_time"] != handoff_time:
+                    raise AssertionError(f"The shared {lower} event has inconsistent timestamps.")
+            if current["target_mode"] != target_mode:
+                raise AssertionError("A linked stage changed the immutable target mode.")
+            if current["prior_upper_mode"] != origin_mode:
+                raise AssertionError("A linked stage changed the immutable origin mode.")
+
+            outcome = current["outcome"]
+            resolution_bars = current["resolution_bars"]
+            same_bar = bool(pd.notna(resolution_bars) and int(resolution_bars) == 0)
+            lineage["same_bar_stage_count"] += int(same_bar)
+            lineage["edges"][_edge_name(lower, upper)] = (outcome, resolution_bars, same_bar)
+            stages.append({
+                "lineage_id": lineage_id,
+                "target_mode": target_mode,
+                "stage": stage_labels[stage_index],
+                "stage_order": stage_index,
+                "attained_depth_before": stage_index,
+                "initiating_event_id": current["initiating_event_id"],
+                "start_time": current["start_time"],
+                "start_position": int(current["start_position"]),
+                "outcome": outcome,
+                "resolution_event_id": current["resolution_event_id"],
+                "resolution_time": current["resolution_time"],
+                "resolution_position": current["resolution_position"],
+                "resolution_bars": resolution_bars,
+            })
+
+            if outcome == AttemptOutcome.PROPAGATED.value:
+                lineage["max_attained_depth"] = stage_index + 1
+                if stage_index == edge_count - 1:
+                    lineage.update({
+                        "terminal_kind": "reached",
+                        "terminal_stage_index": stage_index,
+                        "terminal_event_id": current["resolution_event_id"],
+                        "terminal_time": current["resolution_time"],
+                        "terminal_position": current["resolution_position"],
+                        "terminal_depth": edge_count,
+                    })
+                    break
+                lineage["handoffs"][upper] = (
+                    current["resolution_event_id"], current["resolution_time"], current["resolution_position"],
+                )
+                continue
+
+            lineage.update({
+                "terminal_stage_index": stage_index,
+                "terminal_event_id": current["resolution_event_id"],
+                "terminal_time": current["resolution_time"],
+                "terminal_position": current["resolution_position"],
+            })
+            if outcome == AttemptOutcome.REJECTED.value:
+                lineage.update({"terminal_kind": "stopped", "terminal_depth": stage_index})
+            elif outcome == AttemptOutcome.AMBIGUOUS.value:
+                lineage["terminal_kind"] = "ambiguous"
+            elif outcome == AttemptOutcome.UNRESOLVED.value:
+                lineage["terminal_kind"] = "unresolved"
+            else:
+                raise ValueError(f"Unexpected stage outcome: {outcome}")
+            break
+        lineages.append(lineage)
+    return lineages, stages
+
+
+def _finish_common_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    frame["terminal_depth"] = frame["terminal_depth"].astype("Int64")
+    frame["outcome_information_time"] = frame["terminal_time"]
+    frame["terminal_label_hindsight_at_seed"] = frame["terminal_time"].gt(frame["seed_time"])
+    frame["total_resolution_bars"] = (
+        pd.to_numeric(frame["terminal_position"], errors="coerce") - frame["seed_position"]
+    )
+    frame["resolved_lineage"] = frame["terminal_depth"].notna()
+    frame["strict_clean"] = frame["resolved_lineage"] & frame["same_bar_stage_count"].eq(0)
+    return frame
+
+
+def build_lineage_tables(seed_attempts: pd.DataFrame, later_attempts: Sequence[pd.DataFrame],
+                         scales: Sequence[str | Enum]) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Canonical narrow lineage and stage tables for any ordered scale ladder.
+
+    Returns ``(lineages, stages)``. ``lineages`` has one row per seed with a
+    neutral ``terminal_kind`` (``reached``/``stopped``/``ambiguous``/
+    ``unresolved``/``unlinked``); ``stages`` has one row per traversed stage.
+    """
+    scale_names = tuple(enum_value(scale) for scale in scales)
+    stage_labels = [_stage_name(lower, upper) for lower, upper in zip(scale_names[:-1], scale_names[1:], strict=True)]
+    lineage_records, stage_records = _trace_lineages(seed_attempts, later_attempts, scale_names, stage_labels)
+    lineages = pd.DataFrame.from_records([
+        {key: value for key, value in record.items() if key not in ("handoffs", "edges")}
+        for record in lineage_records
+    ])
+    return _finish_common_columns(lineages), pd.DataFrame.from_records(stage_records)
 
 
 def build_scale_linkages(seed_attempts: pd.DataFrame, later_attempts: Sequence[pd.DataFrame],
                          scales: Sequence[str | Enum]) -> pd.DataFrame:
     """Build a wide small-origin lineage across an arbitrary ordered scale ladder."""
     scale_names = tuple(enum_value(scale) for scale in scales)
-    if len(scale_names) < 3 or len(later_attempts) != len(scale_names) - 2:
-        raise ValueError("later_attempts must contain one frame for every edge after the seed edge.")
-    lookups = []
-    for stage_index, attempts in enumerate(later_attempts, start=1):
-        if attempts["initiating_event_id"].duplicated().any():
-            lower = scale_names[stage_index]
-            raise AssertionError(f"A {lower} event initiates more than one next-scale attempt.")
-        lookups.append(attempts.set_index("initiating_event_id", drop=False))
+    stage_labels = [_stage_name(lower, upper) for lower, upper in zip(scale_names[:-1], scale_names[1:], strict=True)]
+    lineage_records, _ = _trace_lineages(seed_attempts, later_attempts, scale_names, stage_labels)
+    top_scale = scale_names[-1]
 
     records: list[dict[str, object]] = []
-    edge_count = len(scale_names) - 1
-    for seed in seed_attempts.itertuples(index=False):
-        origin_mode = seed.prior_upper_mode
-        target_mode = seed.target_mode
+    for lineage in lineage_records:
+        kind = lineage["terminal_kind"]
+        stage_index = lineage["terminal_stage_index"]
+        lower, upper = scale_names[stage_index], scale_names[stage_index + 1]
+        terminal_outcome = {
+            "reached": f"reached_{top_scale}",
+            "stopped": f"stopped_below_{upper}",
+            "ambiguous": f"ambiguous_{lower}_{upper}",
+            "unresolved": f"unresolved_below_{upper}",
+            "unlinked": f"unlinked_after_{lower}",
+        }[kind]
         record: dict[str, object] = {
-            "seed_small_event_id": seed.initiating_event_id,
-            "seed_time": seed.start_time,
-            "seed_position": seed.start_position,
-            "origin_mode": origin_mode,
-            "target_mode": target_mode,
-            "terminal_event_id": pd.NA,
-            "terminal_time": pd.NaT,
-            "terminal_position": pd.NA,
-            "terminal_depth": pd.NA,
-            "terminal_outcome": pd.NA,
+            "seed_small_event_id": lineage["lineage_id"],
+            "seed_time": lineage["seed_time"],
+            "seed_position": lineage["seed_position"],
+            "origin_mode": lineage["origin_mode"],
+            "target_mode": lineage["target_mode"],
+            "terminal_event_id": lineage["terminal_event_id"],
+            "terminal_time": lineage["terminal_time"],
+            "terminal_position": lineage["terminal_position"],
+            "terminal_depth": lineage["terminal_depth"],
+            "terminal_outcome": terminal_outcome,
         }
         for scale in scale_names[1:-1]:
-            record.update({
-                f"{scale}_event_id": pd.NA,
-                f"{scale}_time": pd.NaT,
-                f"{scale}_position": pd.NA,
-            })
-        for lower, upper in zip(scale_names[:-1], scale_names[1:], strict=True):
-            edge = _edge_name(lower, upper)
-            record.update({
-                f"{edge}_outcome": pd.NA,
-                f"{edge}_bars": pd.NA,
-                f"{edge}_same_bar": False,
-            })
-
-        current = pd.Series(seed._asdict())
-        for stage_index, (lower, upper) in enumerate(zip(scale_names[:-1], scale_names[1:], strict=True)):
-            if stage_index > 0:
-                lookup = lookups[stage_index - 1]
-                handoff_event_id = record[f"{lower}_event_id"]
-                if handoff_event_id not in lookup.index:
-                    record.update({
-                        "terminal_time": record[f"{lower}_time"],
-                        "terminal_position": record[f"{lower}_position"],
-                        "terminal_outcome": f"unlinked_after_{lower}",
-                    })
-                    break
-                current = lookup.loc[handoff_event_id]
-                if isinstance(current, pd.DataFrame):
-                    raise AssertionError("A hand-off event maps to multiple adjacent attempts.")
-                if current["start_time"] != record[f"{lower}_time"]:
-                    raise AssertionError(f"The shared {lower} event has inconsistent timestamps.")
-                if current["target_mode"] != target_mode:
-                    raise AssertionError("A linked stage changed the immutable target mode.")
-                if current["prior_upper_mode"] != origin_mode:
-                    raise AssertionError("A linked stage changed the immutable origin mode.")
-
-            edge = _edge_name(lower, upper)
-            outcome = current["outcome"]
-            record[f"{edge}_outcome"] = outcome
-            record[f"{edge}_bars"] = current["resolution_bars"]
-            record[f"{edge}_same_bar"] = current["resolution_bars"] == 0
-
-            if outcome == AttemptOutcome.PROPAGATED.value:
-                if stage_index == edge_count - 1:
-                    record.update({
-                        "terminal_event_id": current["resolution_event_id"],
-                        "terminal_time": current["resolution_time"],
-                        "terminal_position": current["resolution_position"],
-                        "terminal_depth": edge_count,
-                        "terminal_outcome": f"reached_{upper}",
-                    })
-                    break
-                record.update({
-                    f"{upper}_event_id": current["resolution_event_id"],
-                    f"{upper}_time": current["resolution_time"],
-                    f"{upper}_position": current["resolution_position"],
-                })
-                continue
-
-            record.update({
-                "terminal_event_id": current["resolution_event_id"],
-                "terminal_time": current["resolution_time"],
-                "terminal_position": current["resolution_position"],
-            })
-            if outcome == AttemptOutcome.REJECTED.value:
-                record.update({
-                    "terminal_depth": stage_index,
-                    "terminal_outcome": f"stopped_below_{upper}",
-                })
-            elif outcome == AttemptOutcome.AMBIGUOUS.value:
-                record["terminal_outcome"] = f"ambiguous_{lower}_{upper}"
-            elif outcome == AttemptOutcome.UNRESOLVED.value:
-                record["terminal_outcome"] = f"unresolved_below_{upper}"
-            else:
-                raise ValueError(f"Unexpected stage outcome: {outcome}")
-            break
+            event_id, time, position = lineage["handoffs"].get(scale, (pd.NA, pd.NaT, pd.NA))
+            record.update({f"{scale}_event_id": event_id, f"{scale}_time": time, f"{scale}_position": position})
+        for edge_lower, edge_upper in zip(scale_names[:-1], scale_names[1:], strict=True):
+            edge = _edge_name(edge_lower, edge_upper)
+            outcome, bars, same_bar = lineage["edges"].get(edge, (pd.NA, pd.NA, False))
+            record.update({f"{edge}_outcome": outcome, f"{edge}_bars": bars, f"{edge}_same_bar": same_bar})
+        record.update({
+            "max_attained_depth": lineage["max_attained_depth"],
+            "same_bar_stage_count": lineage["same_bar_stage_count"],
+        })
         records.append(record)
 
     linkages = pd.DataFrame.from_records(records)
-    linkages["terminal_depth"] = linkages["terminal_depth"].astype("Int64")
     for column in [column for column in linkages if column.endswith("_same_bar")]:
         linkages[column] = linkages[column].eq(True)
-    linkages["outcome_information_time"] = linkages["terminal_time"]
-    linkages["terminal_label_hindsight_at_seed"] = linkages["terminal_time"].gt(linkages["seed_time"])
-    linkages["total_resolution_bars"] = (
-        pd.to_numeric(linkages["terminal_position"], errors="coerce") - linkages["seed_position"]
-    )
-    return linkages
+    return _finish_common_columns(linkages)
 
 
 def build_three_scale_linkages(seeds: pd.DataFrame, second_stage: pd.DataFrame) -> pd.DataFrame:
@@ -144,108 +273,59 @@ def build_four_scale_linkages(seeds: pd.DataFrame, stage_two: pd.DataFrame,
 
 def build_five_scale_linkages(seed_attempts: pd.DataFrame,
                               stage_attempts: Mapping[str | Enum, pd.DataFrame]) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Build canonical narrow lineage/stage tables for any mapping of four adjacent stages."""
-    stage_order = tuple(stage_attempts)
-    lookups = {
-        stage: attempts.set_index("initiating_event_id", drop=False)
-        for stage, attempts in stage_attempts.items()
-    }
-    stopped_outcomes = [
-        f"stopped_below_{enum_value(stage).split('_to_')[-1]}" for stage in stage_order
-    ]
-    final_scale = enum_value(stage_order[-1]).split("_to_")[-1]
-    lineage_records: list[dict[str, object]] = []
-    stage_records: list[dict[str, object]] = []
+    """Build narrow lineage/stage tables for an ordered mapping of adjacent stages.
 
-    for seed in seed_attempts.itertuples(index=False):
-        lineage_id = seed.initiating_event_id
-        target_mode = seed.target_mode
-        current_attempt = pd.Series(seed._asdict())
-        terminal_depth = pd.NA
-        terminal_outcome: str | None = None
-        terminal_time = pd.NaT
-        terminal_position = pd.NA
-        handoff_failure_stage = pd.NA
-        same_bar_stage_count = 0
-        prior_resolution_event_id: object = None
+    Stage keys must be named ``<lower>_to_<upper>`` and chain (each stage's
+    upper scale is the next stage's lower scale). The first mapping value is
+    the full seed-edge attempt table; ``seed_attempts`` is the eligible subset.
+    """
+    stage_keys = tuple(stage_attempts)
+    stage_labels = [enum_value(stage) for stage in stage_keys]
+    pairs = [label.split("_to_") for label in stage_labels]
+    if any(len(pair) != 2 for pair in pairs):
+        raise ValueError("Stage names must have the form '<lower>_to_<upper>'.")
+    if any(left[1] != right[0] for left, right in zip(pairs[:-1], pairs[1:], strict=True)):
+        raise ValueError("Stages must chain: each upper scale must be the next stage's lower scale.")
+    scale_names = (pairs[0][0], *[upper for _, upper in pairs])
+    later_attempts = [stage_attempts[stage] for stage in stage_keys[1:]]
+    lineage_records, stage_records = _trace_lineages(seed_attempts, later_attempts, scale_names, stage_labels)
+    final_scale = scale_names[-1]
 
-        for stage_index, stage in enumerate(stage_order):
-            if stage_index > 0:
-                lookup = lookups[stage]
-                if prior_resolution_event_id not in lookup.index:
-                    terminal_outcome = "unlinked_handoff"
-                    handoff_failure_stage = enum_value(stage)
-                    break
-                current_attempt = lookup.loc[prior_resolution_event_id]
-                if isinstance(current_attempt, pd.DataFrame):
-                    raise AssertionError("A hand-off event maps to multiple adjacent attempts.")
-            if current_attempt["target_mode"] != target_mode:
-                raise AssertionError("A linked stage changed the immutable target mode.")
-
-            stage_records.append({
-                "lineage_id": lineage_id,
-                "target_mode": target_mode,
-                "stage": enum_value(stage),
-                "stage_order": stage_index,
-                "attained_depth_before": stage_index,
-                "initiating_event_id": current_attempt["initiating_event_id"],
-                "start_time": current_attempt["start_time"],
-                "start_position": int(current_attempt["start_position"]),
-                "outcome": current_attempt["outcome"],
-                "resolution_event_id": current_attempt["resolution_event_id"],
-                "resolution_time": current_attempt["resolution_time"],
-                "resolution_position": current_attempt["resolution_position"],
-                "resolution_bars": current_attempt["resolution_bars"],
-            })
-            prior_resolution_event_id = current_attempt["resolution_event_id"]
-            if pd.notna(current_attempt["resolution_bars"]) and int(current_attempt["resolution_bars"]) == 0:
-                same_bar_stage_count += 1
-
-            outcome = current_attempt["outcome"]
-            if outcome == AttemptOutcome.PROPAGATED.value:
-                if stage_index == len(stage_order) - 1:
-                    terminal_depth = len(stage_order)
-                    terminal_outcome = f"reached_{final_scale}"
-                    terminal_time = current_attempt["resolution_time"]
-                    terminal_position = current_attempt["resolution_position"]
-                continue
-            terminal_depth = stage_index
-            terminal_time = current_attempt["resolution_time"]
-            terminal_position = current_attempt["resolution_position"]
-            if outcome == AttemptOutcome.REJECTED.value:
-                terminal_outcome = stopped_outcomes[stage_index]
-            elif outcome == AttemptOutcome.AMBIGUOUS.value:
-                terminal_outcome = "ambiguous_stage"
-            elif outcome == AttemptOutcome.UNRESOLVED.value:
-                terminal_outcome = "unresolved_stage"
-            else:
-                raise ValueError(f"Unexpected stage outcome: {outcome}")
-            break
-
-        lineage_records.append({
-            "lineage_id": lineage_id,
-            "target_mode": target_mode,
-            "seed_time": seed.start_time,
-            "seed_position": int(seed.start_position),
-            "terminal_depth": terminal_depth,
+    records: list[dict[str, object]] = []
+    for lineage in lineage_records:
+        kind = lineage["terminal_kind"]
+        stage_index = lineage["terminal_stage_index"]
+        terminal_outcome = {
+            "reached": f"reached_{final_scale}",
+            "stopped": f"stopped_below_{scale_names[stage_index + 1]}",
+            "ambiguous": "ambiguous_stage",
+            "unresolved": "unresolved_stage",
+            "unlinked": "unlinked_handoff",
+        }[kind]
+        records.append({
+            "lineage_id": lineage["lineage_id"],
+            "target_mode": lineage["target_mode"],
+            "seed_time": lineage["seed_time"],
+            "seed_position": lineage["seed_position"],
+            "terminal_depth": lineage["terminal_depth"],
             "terminal_outcome": terminal_outcome,
-            "terminal_time": terminal_time,
-            "terminal_position": terminal_position,
-            "handoff_failure_stage": handoff_failure_stage,
-            "same_bar_stage_count": same_bar_stage_count,
+            "terminal_time": lineage["terminal_time"],
+            "terminal_position": lineage["terminal_position"],
+            "handoff_failure_stage": stage_labels[stage_index] if kind == "unlinked" else pd.NA,
+            "same_bar_stage_count": lineage["same_bar_stage_count"],
+            "origin_mode": lineage["origin_mode"],
+            "terminal_event_id": lineage["terminal_event_id"],
+            "max_attained_depth": lineage["max_attained_depth"],
         })
-
-    lineages = pd.DataFrame.from_records(lineage_records)
-    stages = pd.DataFrame.from_records(stage_records)
-    resolved_outcomes = set(stopped_outcomes) | {f"reached_{final_scale}"}
-    lineages["resolved_lineage"] = lineages["terminal_outcome"].isin(resolved_outcomes)
-    lineages["strict_clean"] = lineages["resolved_lineage"] & lineages["same_bar_stage_count"].eq(0)
-    return lineages, stages
+    lineages = _finish_common_columns(pd.DataFrame.from_records(records))
+    return lineages, pd.DataFrame.from_records(stage_records)
 
 
 def build_wide_stage_table(linkages: pd.DataFrame, scales: Sequence[str | Enum]) -> pd.DataFrame:
     """Convert a resolved wide 3/4-scale linkage table to canonical stage rows."""
     scale_names = tuple(enum_value(scale) for scale in scales)
+    if linkages["terminal_depth"].isna().any():
+        raise ValueError("build_wide_stage_table requires resolved lineages (terminal_depth defined).")
     records: list[dict[str, object]] = []
     for lineage in linkages.itertuples(index=False):
         depth = int(lineage.terminal_depth)
@@ -272,7 +352,7 @@ def build_wide_stage_table(linkages: pd.DataFrame, scales: Sequence[str | Enum])
             records.append({
                 "lineage_id": lineage.seed_small_event_id,
                 "target_mode": lineage.target_mode,
-                "stage": f"{lower}_to_{upper}",
+                "stage": _stage_name(lower, upper),
                 "stage_order": stage_index,
                 "attained_depth_before": stage_index,
                 "initiating_event_id": start_event_id,

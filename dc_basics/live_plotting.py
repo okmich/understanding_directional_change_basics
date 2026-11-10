@@ -10,21 +10,41 @@ from plotly.subplots import make_subplots
 from .events import enum_value
 
 
+# The active stage's own lower and upper clocks cannot fire inside a
+# pre-resolution panel, so their DCC counts are zero by construction and are
+# never plotted. Activity on the clocks *below* the active lower clock is the
+# informative count (see ``dc_basics.live_panel``).
 DEFAULT_TRAJECTORY_FEATURES = {
     "target_progress": "Progress toward upper DCC",
     "lower_r_live": "Live lower-scale R",
     "direction_boundaries": "Directional boundaries",
-    "nested_lower_dcc_rate": "Nested lower-DCC rate",
+    "sub_lower_dcc_rate": "DCC rate below the lower clock",
+}
+# Stage 1's lower clock is the smallest scale: nothing exists below it.
+FIRST_STAGE_TRAJECTORY_FEATURES = {
+    "target_progress": "Progress toward upper DCC",
+    "lower_r_live": "Live lower-scale R",
+    "direction_boundaries": "Directional boundaries",
+    "max_adverse_excursion_theta": "Max adverse excursion (lower-theta units)",
 }
 
 
 def plot_stage_trajectories(panel: pd.DataFrame, stage: str | Enum, max_elapsed_bars: int, *, symbol: str,
-                            features: Mapping[str, str] = DEFAULT_TRAJECTORY_FEATURES) -> go.Figure:
-    """Plot survivor-conditioned median paths by hindsight outcome and target mode."""
+                            features: Mapping[str, str] | None = None) -> go.Figure:
+    """Plot survivor-conditioned median paths by hindsight outcome and target mode.
+
+    With ``features=None`` the first stage uses ``FIRST_STAGE_TRAJECTORY_FEATURES``
+    and later stages use ``DEFAULT_TRAJECTORY_FEATURES``.
+    """
     stage_name = enum_value(stage)
     selected = panel.loc[
         panel["stage"].eq(stage_name) & panel["elapsed_bars"].le(max_elapsed_bars)
     ].copy()
+    if selected.empty:
+        raise ValueError(f"No live rows exist for stage {stage_name!r}.")
+    if features is None:
+        is_first_stage = int(selected["stage_order"].iloc[0]) == 0
+        features = FIRST_STAGE_TRAJECTORY_FEATURES if is_first_stage else DEFAULT_TRAJECTORY_FEATURES
     summary = selected.groupby(
         ["elapsed_bars", "future_stage_outcome", "target_mode"], sort=True
     ).agg(

@@ -7,7 +7,14 @@ import pandas as pd
 
 def classify_configuration(modes: Sequence[str], *, outer_scale_name: str = "outer",
                            expected_count: int | None = None) -> dict[str, object]:
-    """Classify an ordered small-to-large mode vector without future data."""
+    """Classify an ordered small-to-large mode vector without future data.
+
+    ``coherent_frontier`` is True when the ordered modes have *at most one*
+    direction boundary. It therefore includes broad agreement (zero
+    boundaries) as well as every single-front counter depth; only fragmented
+    vectors (two or more boundaries) are False. Use ``direction_boundaries == 1``
+    for "exactly one ordered boundary".
+    """
     values = tuple(str(mode) for mode in modes)
     if expected_count is not None and len(values) != expected_count:
         raise ValueError(f"Expected exactly {expected_count} ordered modes.")

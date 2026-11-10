@@ -1,0 +1,51 @@
+# Chapter 28 — Cross-market robustness
+
+> **Interpretation checkpoint:** The notebook has been executed, but this chapter remains provisional until G24 is answered across all declared cases.
+
+## Purpose
+
+Test whether the representation, direct taxonomy, and frozen modeling procedure retain coherent meaning across markets and sampling choices.
+
+## Structural matrix
+
+[24_cross_market_robustness.ipynb](../../../24_cross_market_robustness.ipynb) retains all 45 predeclared structural cases, including inadequate cases. Threshold ladders and frequencies are fixed across symbols rather than optimized market by market, and comparisons use common calendar coverage.
+
+Report early/middle/late occupancy ranges so period instability is visible. The three periods are equal calendar thirds of the common interval, so every market and sampling frequency is split at the same dates; splitting by row position would put the boundaries on different dates for markets with different trading hours. A result that requires deleting weak cases or inventing a new story for every symbol is non-transfer.
+
+The native bars are stamped at their open (the MetaTrader convention of the source files). Fifteen- and thirty-minute bars keep that convention: each is labelled by its interval open and carries the last native close inside the interval.
+
+## Frozen model procedure
+
+Select the HMM family and state count on GBP validation only after the prefix, occupancy, and restart-stability gates. External markets may refit parameters under the same frozen procedure, but they may not reselect family, state count, features, mapping rules, or adequacy standards. In particular, the emission features screened on GBP training rows are passed unchanged to every market; a frozen feature that turns out to be zero-inflated elsewhere is listed, not silently dropped. Apply and report the same eligibility gates externally; an ineligible market stays in the table.
+
+For every primary market, report:
+
+- filtering causality and prefix invariance;
+- occupancy, restart stability, variance-floor exposure, and eligibility;
+- confidence, persistence, and switching;
+- relationships to direction-neutral and direction-aware direct baselines;
+- omega-squared and permutation evidence for diagnostic usefulness;
+- a block-bootstrap interval for the model's margin over the stronger direct baseline, with its computed verdict (a market whose interval contains zero adds no information beyond the baseline, even when its model looks well behaved);
+- actual price-path casebooks.
+
+Previously inspected markets cannot be represented as untouched confirmation. They are robustness evidence within an explored research program.
+
+## Mandatory exercises
+
+1. Account for all 45 cases, including inadequate ones.
+2. Explain why common calendar coverage and fixed ladders matter.
+3. Verify that only GBP validation selected the model specification.
+4. Verify identical eligibility rules on every external market and retain failures.
+5. Compare structural recurrence with model-state recurrence using both direct baselines.
+6. Identify any symbol-specific rule or interpretation.
+7. Review casebooks for economic intelligibility, keeping raw state IDs visible.
+8. State what evidence would require a genuinely untouched future sample.
+
+## Locked in
+
+> Transfer means one frozen causal procedure retains interpretable structure across markets without market-specific reselection or storytelling.
+
+## Do not conclude
+
+Cross-market state stability is not a trading strategy. Economic value remains a separate, cost-aware, conditionally evaluated research question.
+

@@ -6,3 +6,6 @@ __pycache__/
 .pytest_cache/
 .venv/
 *.parquet
+
+# Local machine settings (see dc_basics.data.resolve_data_root)
+.dc_data_root

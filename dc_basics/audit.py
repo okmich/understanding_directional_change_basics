@@ -5,6 +5,8 @@ from collections.abc import Mapping, Sequence
 import numpy as np
 import pandas as pd
 
+from .enums import AttemptOutcome
+
 
 DEFAULT_LIVE_FEATURES = (
     "lower_tmv_live", "lower_t_live", "lower_r_live",
@@ -53,20 +55,45 @@ def audit_live_panel(panel: pd.DataFrame, *, expected_stage_counts: Mapping[str,
     return pd.Series(summary, name="value")
 
 
-def count_events_inside(positions: np.ndarray, start_position: int, end_position: int) -> int:
+def count_events_inside(positions: np.ndarray, start_position: int, end_position: int, *,
+                        include_end: bool = True) -> int:
+    """Count sorted event positions after ``start_position`` and up to ``end_position``.
+
+    With ``include_end=True`` the window is ``(start, end]``, so a DCC on the
+    end bar (for a stage, its resolving DCC) is counted. Use
+    ``include_end=False`` for the open window ``(start, end)``: activity that
+    happened strictly *before* the stage resolved.
+    """
     left = np.searchsorted(positions, start_position, side="right")
-    right = np.searchsorted(positions, end_position, side="right")
+    right = np.searchsorted(positions, end_position, side="right" if include_end else "left")
     return int(right - left)
 
 
 def summarize_stage(sample: pd.DataFrame, stage_name: str) -> dict[str, object]:
-    resolved = sample.loc[sample["outcome"].isin(["propagated", "rejected"])]
-    propagated = resolved["outcome"].eq("propagated")
+    """Summarize one table of adjacent attempts with two explicitly named rates.
+
+    - ``propagation_rate``: propagated / (propagated + rejected), *including*
+      zero-bar (same-bar) propagations;
+    - ``clean_propagation_rate``: the same ratio over ``clean_future_attempts``,
+      the resolved attempts with at least one pre-resolution bar. A zero-bar
+      attempt can only be a propagation, so this rate is lower by construction.
+    """
+    resolved = sample.loc[
+        sample["outcome"].isin([AttemptOutcome.PROPAGATED.value, AttemptOutcome.REJECTED.value])
+    ]
+    resolution_bars = pd.to_numeric(resolved["resolution_bars"], errors="coerce")
+    propagated = resolved["outcome"].eq(AttemptOutcome.PROPAGATED.value)
+    clean = resolved.loc[resolution_bars.gt(0)]
+    clean_propagated = clean["outcome"].eq(AttemptOutcome.PROPAGATED.value)
     return {
         "stage": stage_name,
         "attempts": len(sample),
         "resolved_attempts": len(resolved),
         "propagation_rate": propagated.mean() if len(resolved) else np.nan,
-        "median_resolution_bars": resolved["resolution_bars"].median(),
-        "same_bar_rate": resolved["resolution_bars"].eq(0).mean() if len(resolved) else np.nan,
+        "median_resolution_bars": resolution_bars.median(),
+        "same_bar_propagations": int((propagated & resolution_bars.eq(0)).sum()),
+        "same_bar_rate": resolution_bars.eq(0).mean() if len(resolved) else np.nan,
+        "clean_future_attempts": len(clean),
+        "clean_propagation_rate": clean_propagated.mean() if len(clean) else np.nan,
+        "median_clean_resolution_bars": pd.to_numeric(clean["resolution_bars"]).median() if len(clean) else np.nan,
     }
