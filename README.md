@@ -18,12 +18,11 @@ This is a research and education repository. It is not a trading strategy or inv
 
 ## Why this project is different
 
-Directional Change is easy to implement superficially and easy to misread. Common errors include:
+Directional Change is easy to implement superficially and easy to misread. I went through the proverbial arc of learning many times until I decided to document it myself. Common errors include:
 
 - treating a peak or trough as known before its reversal confirmation;
 - confusing the completed prior leg with the newly confirmed live mode;
 - mapping an event state onto bars as if it were recomputed every bar;
-- calling an unresolved counter-move “propagated” using its future outcome;
 - linking multiscale stages by nearby timestamps instead of exact event IDs;
 - using terminal propagation depth as a live feature;
 - treating a model's state name as market truth;
@@ -42,21 +41,6 @@ At every DCC, ask three questions:
 A downward DCC therefore confirms the prior peak and switches the live mode down. An upward DCC confirms the prior trough and switches the live mode up.
 
 With several thresholds, each threshold maintains an independent event clock on the same price path. Small-scale opposition is observable immediately; whether it reaches medium, large, macro, or outer scales remains unknown until the corresponding confirmations occur.
-
-## Project status
-
-| Area | Status |
-|---|---|
-| Directional Change research phases 0–19 | Complete |
-| Regime-model notebooks, phases 20–24 | Executed; formal interpretation gates still under review |
-| Reusable DC implementation | Complete at the current research boundary |
-| Foundational invariant tests | Present; release-level expansion remains |
-| Standalone educational repository | Complete |
-| Notes, Chapters 0–30 | Concise first draft complete |
-| Technical and pedagogical review | In progress |
-| Clean-environment reproducibility release | Pending |
-
-The [notes README](notes/README.md) is the source of truth for the chapter roadmap and [completion gates](notes/README.md#completion-gates).
 
 ## Start here
 
@@ -128,37 +112,12 @@ Market data is not included. Use data that you are licensed to access.
 
 No notebook contains a machine path. Every notebook calls `dc_basics.resolve_data_root()`, which looks in this order for the data directory:
 
-1. the `DC_DATA_ROOT` environment variable;
-2. the first non-empty line of a `.dc_data_root` file at the repository root (git-ignored, so each machine keeps its own).
-
-For example:
-
-```bash
-echo /path/to/your/parquet/files > .dc_data_root
-```
-
-Each symbol is expected at:
-
-```text
-<DATA_ROOT>/<SYMBOL>.parquet
-```
-
 Accepted Parquet schema:
 
 - a unique, ordered `DatetimeIndex`, or a `time` column convertible to one;
 - a `close` column;
 - finite, strictly positive close prices;
 - native five-minute observations for the supplied resampling workflow.
-
-Example:
-
-```python
-from dc_basics import load_close, resolve_data_root
-
-DATA_ROOT = resolve_data_root()
-SYMBOL = "EURUSD.r"
-close = load_close(DATA_ROOT, SYMBOL)
-```
 
 **Timestamp convention.** MetaTrader-style exports, including the files used for the saved outputs, stamp each bar with its *open* time: the close of the bar stamped 10:05 is first known at 10:10. `load_close(..., bar_timestamp="open")` is the default. Pass `bar_timestamp="close"` for data stamped at bar close.
 
@@ -172,7 +131,7 @@ The existing saved notebook outputs document the original experiments, but a rep
 from dc_basics import load_close, parse_dc_events, prepare_event_ledger, resolve_data_root
 
 theta = 0.002  # 0.20%
-close = load_close(resolve_data_root(), "EURUSD.r")
+close = load_close(resolve_data_root(), "EURUSD")
 
 events = parse_dc_events(close, theta=theta)
 ledger = prepare_event_ledger(
@@ -205,29 +164,6 @@ information_time == dcc_idx
 The ending extreme may occur earlier, but its completed TMV, T, and R are not available until the DCC confirms it.
 
 The essential direction rule is that each row describes the leg that *ended*. The parser's `direction` column is that completed leg, kept as `completed_leg_direction`. A row whose completed leg is `up` was closed by a *downward* DCC (`dcc_direction == "down"`), which switches the live mode down (`new_live_mode == "down"`).
-
-## Repository structure
-
-```text
-.
-├── 1_threshold_*.ipynb              # Single-threshold mechanics and HMMs
-├── 2_threshold_*.ipynb              # Two-clock relationships and live paths
-├── 3_threshold_*.ipynb              # Three-scale mechanics, lineage, robustness
-├── 4_threshold_*.ipynb              # Four-scale hierarchy
-├── 5_threshold_*.ipynb              # Five-scale grid, lineage, and robustness
-├── 20_*.ipynb ... 24_*.ipynb        # Multiscale regime research
-├── multiscale_representation_design.ipynb
-├── dc_basics/                        # Self-contained reusable DC package
-├── dc_multiscale_research.py         # Arbitrary-N and regime research utilities
-├── tests/                            # Construction and provenance invariants
-├── notes/                            # Chapters 0–30; README.md holds contents, gates, and the authoring contract
-├── requirements.txt                  # Research dependencies (HMM fork pinned by commit)
-├── requirements-dev.txt              # Adds the test runner
-├── pytest.ini
-└── .dc_data_root                     # Optional, git-ignored: your local data directory
-```
-
-See [`dc_basics/README.md`](dc_basics/README.md) for module boundaries and the package causality contract.
 
 ## Causality contract
 
@@ -266,25 +202,12 @@ The tests cover:
 
 `tests/test_prefix_invariance.py` rebuilds ledgers, attempts, lineages and the arbitrary-N state from a price prefix and compares each with the full-sample build. See [Chapter 29](notes/29_reusable_library.md#invariants-as-executable-knowledge) for what remains.
 
-## Reading the results responsibly
 
-The notebooks use future labels in clearly marked diagnostic analyses. This is valid for understanding whether causal path features differ between eventual outcomes. It does not make those outcomes available at the earlier observation time.
-
-Similarly:
-
-- `fast_R` and `slow_R` are fitted model semantics, not universal R thresholds;
-- broad coherence is a structural state, not automatically a profitable trend;
-- outer-scale propagation confirms scale reach, not continuation;
-- a regime model must add information beyond the directly observable hierarchy;
-- no notebook in this repository establishes a deployable trading strategy.
-
-## Intellectual provenance
+## Credits and acknowledgements
 
 Directional Change is an established research framework. Foundational credit belongs to Dominique M. Guillaume, Michel M. Dacorogna, Rakhal R. Davé, Ulrich A. Müller, Richard B. Olsen, and Olivier V. Pictet.
 
 This project is especially indebted to Jun Chen and Edward P. K. Tsang, authors of *Detecting Regime Change in Computational Finance: Data Science, Machine Learning and Algorithmic Trading*. Their work motivates the progression from Directional Change indicators to regime characterization and causal market monitoring.
-
-The contribution of this repository is pedagogical and engineering-focused: a chronological intuition path, explicit causal provenance, exact multiscale event genealogy, executable completion gates, and a reusable implementation.
 
 See the notes' [credits and acknowledgements](notes/README.md#credits-and-acknowledgements) and [core bibliography](notes/README.md#core-bibliography) for full attribution requirements and primary references.
 
@@ -292,23 +215,5 @@ See the notes' [credits and acknowledgements](notes/README.md#credits-and-acknow
 
 - Market data and a portable sample dataset are not included.
 - Some notebooks contain large saved outputs.
-- Chapters 24–28 remain provisional until completion gates G20–G24 are formally interpreted.
 - The test suite is foundational rather than release-complete.
 - A clean-machine execution and dependency-locking pass remains pending.
-- No repository license has yet been declared; do not assume permission beyond viewing and evaluating the public material.
-
-## Next milestone
-
-The current milestone is a combined learning and review pass:
-
-```text
-read chapter
--> run linked notebook
--> inspect actual paths
--> answer completion gate
--> compare with the chapter's completion-gate guidance
--> correct and approve the chapter
-```
-
-After that comes the final reproducibility pass, selected figure integration, release-level testing, and a reviewed first edition.
-
