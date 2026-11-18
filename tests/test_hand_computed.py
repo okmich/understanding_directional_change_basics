@@ -57,7 +57,8 @@ def hand_frame() -> pd.DataFrame:
 @pytest.fixture(scope="module")
 def hand_lineages() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     frame = hand_frame()
-    small_medium = build_adjacent_attempts(frame, "small", "medium")
+    with pytest.warns(UserWarning, match="confirmed before any small counter-attempt"):
+        small_medium = build_adjacent_attempts(frame, "small", "medium")
     medium_large = build_adjacent_attempts(frame, "medium", "large")
     lineages, stages = build_lineage_tables(small_medium, [medium_large], SCALES)
     return small_medium, lineages.set_index("lineage_id"), stages
@@ -119,9 +120,10 @@ def test_lineages_match_the_hand_answer(hand_lineages) -> None:
 
 def test_three_scale_view_agrees_with_the_hand_answer() -> None:
     frame = hand_frame()
-    wide = build_three_scale_linkages(
-        build_adjacent_attempts(frame, "small", "medium"), build_adjacent_attempts(frame, "medium", "large")
-    ).set_index("seed_small_event_id")
+    with pytest.warns(UserWarning, match="confirmed before any small counter-attempt"):
+        wide = build_three_scale_linkages(
+            build_adjacent_attempts(frame, "small", "medium"), build_adjacent_attempts(frame, "medium", "large")
+        ).set_index("seed_small_event_id")
     assert wide.loc["S3", "terminal_outcome"] == "reached_large"
     assert wide.loc["S1", "terminal_outcome"] == "stopped_below_medium"
     assert wide.loc["S4", "terminal_outcome"] == "stopped_below_large"
@@ -130,7 +132,8 @@ def test_three_scale_view_agrees_with_the_hand_answer() -> None:
 
 def test_stage_frames_in_the_wrong_order_are_refused() -> None:
     frame = hand_frame()
-    small_medium = build_adjacent_attempts(frame, "small", "medium")
+    with pytest.warns(UserWarning, match="confirmed before any small counter-attempt"):
+        small_medium = build_adjacent_attempts(frame, "small", "medium")
     medium_large = build_adjacent_attempts(frame, "medium", "large")
     with pytest.raises(ValueError, match="ladder expects"):
         build_lineage_tables(medium_large, [small_medium], SCALES)

@@ -15,6 +15,18 @@ DEFAULT_LIVE_FEATURES = (
 )
 
 
+def observed_median(values: pd.Series) -> float:
+    """Return the median of observed numeric values, or NaN when none exist."""
+    observed = pd.to_numeric(values, errors="coerce").dropna()
+    return float(observed.median()) if not observed.empty else np.nan
+
+
+def observed_quantile(values: pd.Series, quantile: float) -> float:
+    """Return a quantile of observed numeric values, or NaN when none exist."""
+    observed = pd.to_numeric(values, errors="coerce").dropna()
+    return float(observed.quantile(quantile)) if not observed.empty else np.nan
+
+
 def audit_live_panel(panel: pd.DataFrame, *, expected_stage_counts: Mapping[str, int] | None = None,
                      required_features: Sequence[str] = DEFAULT_LIVE_FEATURES,
                      require_seed_identity: bool = True) -> pd.Series:

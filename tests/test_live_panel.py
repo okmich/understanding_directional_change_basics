@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from dc_basics.audit import audit_live_panel
+from dc_basics.audit import audit_live_panel, observed_median, observed_quantile
 from dc_basics.core import dc_live_features, parse_dc_events
 from dc_basics.events import prepare_event_ledger
 from dc_basics.hierarchy import build_adjacent_attempts
@@ -77,7 +77,15 @@ def build_three_scale_inputs(prices: pd.Series) -> dict[str, object]:
     seeds = small_medium.loc[(prior.notna().all(axis=1) & prior.nunique(axis=1).eq(1)).to_numpy()]
     linkages = build_three_scale_linkages(seeds, medium_large)
     resolved = linkages.loc[linkages["terminal_depth"].notna()]
-    stage_one_end = resolved["terminal_position"].where(resolved["terminal_depth"].eq(0), resolved["medium_position"])
+    stage_one_end = pd.Series(
+        np.where(
+            resolved["terminal_depth"].eq(0),
+            pd.to_numeric(resolved["terminal_position"], errors="coerce"),
+            pd.to_numeric(resolved["medium_position"], errors="coerce"),
+        ),
+        index=resolved.index,
+        dtype=np.float64,
+    )
     stage_two_live = resolved["terminal_depth"].eq(0) | pd.to_numeric(resolved["terminal_position"]).gt(
         pd.to_numeric(resolved["medium_position"])
     )
@@ -111,6 +119,15 @@ def three_scale() -> dict[str, object]:
     inputs = build_three_scale_inputs(synthetic_prices())
     inputs["panel"] = build_live_panel(inputs["stages"], inputs["strict"], inputs["context"], STAGE_SPECS)
     return inputs
+
+
+def test_observed_summary_helpers_return_nan_without_warnings() -> None:
+    missing = pd.Series([pd.NA, np.nan], dtype="Float64")
+    observed = pd.Series([1.0, np.nan, 3.0])
+    assert np.isnan(observed_median(missing))
+    assert np.isnan(observed_quantile(missing, 0.90))
+    assert observed_median(observed) == 2.0
+    assert observed_quantile(observed, 0.50) == 2.0
 
 
 def test_panel_passes_the_information_time_audit(three_scale: dict[str, object]) -> None:

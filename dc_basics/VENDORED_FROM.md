@@ -16,7 +16,7 @@ Copied modules:
 - `_features.py`
 - `_tsfdc_features.py`
 
-The local `core/__init__.py` deliberately exposes only the functions used bynthis research journey: `parse_dc_events`, `dc_live_features`, `log_r`, `normalise_minmax`, and `parse_dual_dc`.
+The local `core/__init__.py` deliberately exposes only the functions used by this research journey: `parse_dc_events`, `dc_live_features`, `log_r`, `normalise_minmax`, and `parse_dual_dc`.
 
 ## HMM layer
 
